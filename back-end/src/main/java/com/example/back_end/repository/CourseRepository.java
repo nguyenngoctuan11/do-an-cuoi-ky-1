@@ -1,0 +1,80 @@
+package com.example.back_end.repository;
+
+import com.example.back_end.model.Course;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import java.util.List;
+import java.util.Optional;
+import com.example.back_end.repository.projection.CourseCardProjection;
+import com.example.back_end.repository.projection.CourseCardSqlProjection;
+import com.example.back_end.repository.projection.ManagerPendingCourseProjection;
+import com.example.back_end.repository.projection.TeacherCourseProjection;
+
+@Repository
+public interface CourseRepository extends JpaRepository<Course, Long> {
+    Optional<Course> findBySlug(String slug);
+    List<Course> findAllByOrderByIdDesc(Pageable pageable);
+    boolean existsBySlugIgnoreCaseAndIdNot(String slug, Long id);
+
+    @Query(value = "\n" +
+            "SELECT\n" +
+            "  c.id, c.title, c.slug, c.level, c.status, c.price, c.thumbnail_url AS thumbnailUrl,\n" +
+            "  (SELECT COUNT(*)\n" +
+            "     FROM dbo.lessons l JOIN dbo.modules m ON l.module_id = m.id\n" +
+            "    WHERE m.course_id = c.id) AS lessonsCount,\n" +
+            "  (SELECT TOP 1 a.url\n" +
+            "     FROM dbo.lesson_assets a\n" +
+            "     JOIN dbo.lessons l ON a.lesson_id = l.id\n" +
+            "     JOIN dbo.modules m ON l.module_id = m.id\n" +
+            "    WHERE m.course_id = c.id AND a.kind = N'video'\n" +
+            "    ORDER BY a.id) AS previewVideoUrl\n" +
+            "FROM dbo.courses c\n" +
+            "WHERE (:status IS NULL OR c.status = :status)\n" +
+            "ORDER BY c.created_at DESC\n" +
+            "OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY\n", nativeQuery = true)
+    List<CourseCardProjection> findCourseCards(@Param("status") String status,
+                                               @Param("offset") int offset,
+                                               @Param("limit") int limit);
+
+    // Phiên bản trả tên cột đúng T-SQL (snake_case)
+    @Query(value = "\n" +
+            "SELECT\n" +
+            "  c.id, c.title, c.slug, c.level, c.status, c.price, c.thumbnail_url,\n" +
+            "  (SELECT COUNT(*)\n" +
+            "     FROM dbo.lessons l JOIN dbo.modules m ON l.module_id = m.id\n" +
+            "    WHERE m.course_id = c.id) AS lessons_count,\n" +
+            "  (SELECT TOP 1 a.url\n" +
+            "     FROM dbo.lesson_assets a\n" +
+            "     JOIN dbo.lessons l ON a.lesson_id = l.id\n" +
+            "     JOIN dbo.modules m ON l.module_id = m.id\n" +
+            "    WHERE m.course_id = c.id AND a.kind = N'video'\n" +
+            "    ORDER BY a.id) AS preview_video_url\n" +
+            "FROM dbo.courses c\n" +
+            "WHERE (:status IS NULL OR c.status = :status)\n" +
+            "ORDER BY c.created_at DESC\n" +
+            "OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY\n", nativeQuery = true)
+    List<CourseCardSqlProjection> findCourseCardsSql(@Param("status") String status,
+                                                     @Param("offset") int offset,
+                                                     @Param("limit") int limit);
+
+    @Query(value = "\n" +
+            "SELECT c.id, c.title, c.slug, c.status, c.approval_status AS approvalStatus,\n" +
+            "       u.email AS createdByEmail, u.full_name AS createdByName, c.created_at AS createdAt\n" +
+            "FROM dbo.courses c\n" +
+            "JOIN dbo.users u ON u.id = c.created_by\n" +
+            "WHERE c.approval_status = N'pending'\n" +
+            "ORDER BY c.created_at DESC\n", nativeQuery = true)
+    List<ManagerPendingCourseProjection> findPendingForManager();
+
+    @Query(value = "\n" +
+            "SELECT c.id, c.title, c.slug, c.status, c.approval_status AS approvalStatus, c.created_at AS createdAt, c.updated_at AS updatedAt\n" +
+            "FROM dbo.courses c\n" +
+            "JOIN dbo.users u ON u.id = c.created_by\n" +
+            "WHERE u.email = :email\n" +
+            "ORDER BY c.created_at DESC\n", nativeQuery = true)
+    List<TeacherCourseProjection> findCoursesByCreatorEmail(@Param("email") String email);
+}

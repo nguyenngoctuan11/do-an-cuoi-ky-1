@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="vi"><head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Chi tiết khoá học (Duyệt)</title>
+  <link rel="stylesheet" href="/app/app.css"/>
+  <script type="module">
+    import {mountNav, api, qs, requireAuth} from '/app/app-common.js';
+    const el = id => document.getElementById(id);
+    const id = Number(qs('id'));
+    async function load(){
+      if(!requireAuth(['MANAGER'])) return;
+      const d = await api(`/api/manager/courses/${id}/detail-sql`);
+      el('title').textContent = d.title;
+      el('meta').textContent = `Slug: ${d.slug} • Level: ${d.level||''} • Status: ${d.status||''}`;
+      el('creator').textContent = `Người tạo: ${d.created_by_name||''} <${d.created_by_email||''}>`;
+      // modules/lessons
+      const box = el('modules');
+      box.innerHTML = (d.modules||[]).map(m => `
+        <div class="card">
+          <h3>Phần: ${m.title} (#${m.id})</h3>
+          <table>
+            <thead><tr><th>Bài học</th><th>Loại</th><th>Thời lượng</th><th>Trạng thái</th></tr></thead>
+            <tbody>
+              ${(m.lessons||[]).map(l => `
+                <tr>
+                  <td>${l.title}</td>
+                  <td>${l.type||''}</td>
+                  <td>${l.duration_seconds? Math.floor(l.duration_seconds/60)+':'+String(l.duration_seconds%60).padStart(2,'0'):''}</td>
+                  <td>${l.status||''}</td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>`).join('');
+    }
+    async function approve(){ await api(`/api/manager/courses/${id}/approve`, {method:'POST'}); alert('Đã duyệt'); location.href='/app/admin/manager-review.html'; }
+    async function reject(){
+      const note = prompt('Lý do từ chối? (tùy chọn)','');
+      await api(`/api/manager/courses/${id}/reject`, {method:'POST', body: JSON.stringify({note})});
+      alert('Đã từ chối');
+      location.href='/app/admin/manager-review.html';
+    }
+    window.addEventListener('DOMContentLoaded', ()=>{ mountNav('nav'); load(); el('approve').onclick=approve; el('reject').onclick=reject; });
+  </script>
+</head>
+<body>
+  <div id="nav"></div>
+  <div class="container">
+    <div class="card">
+      <h2 id="title">Chi tiết khoá học</h2>
+      <div class="muted" id="meta"></div>
+      <div class="muted" id="creator"></div>
+      <div class="row" style="margin-top:8px">
+        <button id="approve">Duyệt</button>
+        <button id="reject">Từ chối</button>
+      </div>
+    </div>
+    <div id="modules"></div>
+  </div>
+</body></html>

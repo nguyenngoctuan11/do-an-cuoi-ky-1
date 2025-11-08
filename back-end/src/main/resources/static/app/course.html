@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Chi tiết khóa học</title>
+  <link rel="stylesheet" href="/app/app.css"/>
+  <script type="module">
+    import {nav, api, qs} from './app-common.js';
+    const el = id => document.getElementById(id);
+    const courseId = Number(qs('id'));
+
+    async function loadModules(){
+      const modules = await api(`/api/courses/${courseId}/modules`);
+      el('modules').innerHTML = modules.map(m => `
+        <div class="card">
+          <div class="row"><strong>Phần: ${m.title}</strong> <span class="muted">(#${m.id})</span></div>
+          <div class="grid">
+            <div class="row">
+              <input data-mid="${m.id}" class="m-title" value="${m.title}"/>
+              <input data-mid="${m.id}" class="m-sort" value="${m.sortOrder||0}" style="width:100px"/>
+              <button data-mid="${m.id}" class="m-save">Lưu</button>
+              <button data-mid="${m.id}" class="m-del">Xóa</button>
+            </div>
+            <div>
+              <table>
+                <thead><tr><th>Bài học</th><th>Loại</th><th>Thời lượng</th><th>Thứ tự</th><th>Trạng thái</th><th></th></tr></thead>
+                <tbody>
+                  ${m.lessons.map(l=>`<tr>
+                    <td><input data-lid="${l.id}" class="l-title" value="${l.title}"/></td>
+                    <td><input data-lid="${l.id}" class="l-type" value="${l.type}"/></td>
+                    <td><input data-lid="${l.id}" class="l-dur" value="${l.durationSeconds||0}" style="width:100px"/></td>
+                    <td><input data-lid="${l.id}" class="l-sort" value="${l.sortOrder||0}" style="width:100px"/></td>
+                    <td><input data-lid="${l.id}" class="l-status" value="${l.status||'draft'}"/></td>
+                    <td>
+                      <button data-lid="${l.id}" class="l-save">Lưu</button>
+                      <button data-lid="${l.id}" class="l-del">Xóa</button>
+                    </td>
+                  </tr>`).join('')}
+                </tbody>
+              </table>
+              <div class="row">
+                <input id="lTitle-${m.id}" placeholder="Tiêu đề bài học"/>
+                <input id="lType-${m.id}" placeholder="Loại (video/article/quiz)"/>
+                <input id="lDur-${m.id}" placeholder="Giây" style="width:100px"/>
+                <input id="lSort-${m.id}" placeholder="Thứ tự" style="width:100px"/>
+                <select id="lStatus-${m.id}"><option>draft</option><option>published</option></select>
+                <button data-mid="${m.id}" class="l-add">Thêm bài học</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `).join('');
+
+      // wire events
+      document.querySelectorAll('.m-save').forEach(btn => btn.onclick = async (e)=>{
+        const mid = e.target.getAttribute('data-mid');
+        const title = document.querySelector(`.m-title[data-mid="${mid}"]`).value;
+        const sort = Number(document.querySelector(`.m-sort[data-mid="${mid}"]`).value||0);
+        await api(`/api/modules/${mid}`, {method:'PATCH', body: JSON.stringify({title, sortOrder: sort})});
+        await loadModules();
+      });
+      document.querySelectorAll('.m-del').forEach(btn => btn.onclick = async (e)=>{
+        const mid = e.target.getAttribute('data-mid');
+        await api(`/api/modules/${mid}`, {method:'DELETE'}); await loadModules();
+      });
+      document.querySelectorAll('.l-add').forEach(btn => btn.onclick = async (e)=>{
+        const mid = e.target.getAttribute('data-mid');
+        const body = {
+          title: document.getElementById(`lTitle-${mid}`).value,
+          type: document.getElementById(`lType-${mid}`).value||'article',
+          durationSeconds: Number(document.getElementById(`lDur-${mid}`).value||0),
+          sortOrder: Number(document.getElementById(`lSort-${mid}`).value||0),
+          status: document.getElementById(`lStatus-${mid}`).value||'draft'
+        };
+        await api(`/api/modules/${mid}/lessons`, {method:'POST', body: JSON.stringify(body)});
+        await loadModules();
+      });
+      document.querySelectorAll('.l-save').forEach(btn => btn.onclick = async (e)=>{
+        const lid = e.target.getAttribute('data-lid');
+        const title = document.querySelector(`.l-title[data-lid="${lid}"]`).value;
+        const type = document.querySelector(`.l-type[data-lid="${lid}"]`).value;
+        const dur = Number(document.querySelector(`.l-dur[data-lid="${lid}"]`).value||0);
+        const sort = Number(document.querySelector(`.l-sort[data-lid="${lid}"]`).value||0);
+        const status = document.querySelector(`.l-status[data-lid="${lid}"]`).value;
+        await api(`/api/lessons/${lid}`, {method:'PATCH', body: JSON.stringify({title, type, durationSeconds:dur, sortOrder:sort, status})});
+        await loadModules();
+      });
+      document.querySelectorAll('.l-del').forEach(btn => btn.onclick = async (e)=>{
+        const lid = e.target.getAttribute('data-lid');
+        await api(`/api/lessons/${lid}`, {method:'DELETE'}); await loadModules();
+      });
+    }
+
+    async function addModule(){
+      const title = el('mTitle').value.trim();
+      const sort = Number(el('mSort').value||0);
+      await api(`/api/courses/${courseId}/modules`, {method:'POST', body: JSON.stringify({title, sortOrder: sort})});
+      el('mTitle').value=''; el('mSort').value='';
+      await loadModules();
+    }
+
+    window.addEventListener('DOMContentLoaded', async () => {
+      document.getElementById('nav').innerHTML = nav();
+      el('addModuleBtn').onclick = addModule;
+      await loadModules();
+    });
+  </script>
+</head>
+<body>
+  <div id="nav"></div>
+  <div class="container">
+    <div class="card">
+      <h2>Chi tiết khóa học</h2>
+      <div class="row">
+        <input id="mTitle" placeholder="Tiêu đề phần"/>
+        <input id="mSort" placeholder="Thứ tự" style="width:100px"/>
+        <button id="addModuleBtn">Thêm phần</button>
+      </div>
+    </div>
+    <div id="modules"></div>
+  </div>
+</body>
+</html>
+

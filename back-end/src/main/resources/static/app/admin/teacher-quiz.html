@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="vi"><head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Tạo bài kiểm tra (Giảng viên)</title>
+  <link rel="stylesheet" href="/app/app.css"/>
+  <script type="module">
+    import {mountNav, api, token, requireAuth} from '/app/app-common.js';
+    const el = (id)=>document.getElementById(id);
+
+    let currentCourse = null;
+    let currentQuiz = null;
+
+    async function loadCourses(){
+      if(!requireAuth(['TEACHER','MANAGER'])) return;
+      const list = await api('/api/teacher/courses/my');
+      const sel = el('course');
+      sel.innerHTML = '<option value="">-- chọn khóa học --</option>' +
+        (list||[]).map(c=>`<option value="${c.id}">#${c.id} • ${c.title} (${c.status})</option>`).join('');
+    }
+
+    async function onCourseChange(){
+      currentCourse = Number(el('course').value)||null;
+      currentQuiz = null; el('quizId').textContent = '-';
+      el('qList').innerHTML = '';
+      if(currentCourse){ await loadQuizzes(currentCourse); }
+    }
+
+    async function loadQuizzes(courseId){
+      try{
+        const list = await api(`/api/teacher/quizzes/course/${courseId}`);
+        el('quizzes').innerHTML = (list||[]).map(q=>`<tr>
+          <td>${q.id}</td>
+          <td>${q.title||''}</td>
+          <td>${q.timeLimitSec||0}</td>
+          <td>${q.questions||0}</td>
+          <td><button class="choose" data-id="${q.id}">Chọn</button></td>
+        </tr>`).join('') || '<tr><td colspan="5" class="muted">Chưa có bài kiểm tra</td></tr>';
+        document.querySelectorAll('.choose').forEach(b=> b.onclick=(e)=>{
+          currentQuiz = Number(e.target.getAttribute('data-id')); el('quizId').textContent = currentQuiz; el('msg').textContent='Đã chọn đề #' + currentQuiz;
+        });
+      }catch(e){ el('msg').textContent='Lỗi tải danh sách đề: '+(e.message||e);}  
+    }
+
+    async function createQuiz(){
+      if(!currentCourse){ alert('Chọn khóa học trước'); return; }
+      const title = el('quizTitle').value.trim();
+      const time = Number(el('quizTime').value||0);
+      const shuffle = el('quizShuffle').checked;
+      try{
+        const res = await api('/api/teacher/quizzes', {method:'POST', body: JSON.stringify({ courseId: currentCourse, title, timeLimitSec: time, shuffle })});
+        currentQuiz = res.id; el('quizId').textContent = currentQuiz; el('msg').textContent = 'Đã tạo đề #' + currentQuiz;
+        await loadQuizzes(currentCourse);
+      }catch(e){ el('msg').textContent = 'Lỗi tạo đề: ' + (e.message||e); }
+    }
+
+    async function addQuestion(){
+      if(!currentQuiz){ alert('Chọn hoặc tạo đề trước'); return; }
+      const text = el('qText').value.trim();
+      const points = Number(el('qPoint').value||1);
+      const opts = ["A","B","C","D"].map((k,i)=>{
+        return { text: el('opt'+k).value.trim(), correct: el('correct'+k).checked };
+      });
+      if(!opts.some(o=>o.correct)){ alert('Chọn 1 đáp án đúng'); return; }
+      try{
+        await api(`/api/teacher/quizzes/${currentQuiz}/questions`, { method:'POST', body: JSON.stringify({ text, points, options: opts })});
+        el('qText').value=''; ["A","B","C","D"].forEach(k=>{ el('opt'+k).value=''; el('correct'+k).checked=false; });
+        await loadQuizzes(currentCourse);
+        el('msg').textContent = 'Đã thêm câu hỏi';
+      }catch(e){ el('msg').textContent = 'Lỗi thêm câu: ' + (e.message||e); }
+    }
+
+    async function upload(kind, inputId){
+      const file = el(inputId).files[0]; if(!file){ alert('Chọn file'); return; }
+      const fd = new FormData(); fd.append('file', file);
+      const hdr = token()? { Authorization:`Bearer ${token()}` } : {};
+      const r = await fetch(`/api/upload/${kind}`, { method:'POST', headers: hdr, body: fd});
+      const t = await r.text(); let d; try{ d=t?JSON.parse(t):null;}catch{ d=null; }
+      if(!r.ok){ alert((d&&d.message)||r.statusText); return; }
+      const url = d.url; // chèn vào nội dung câu hỏi
+      const area = el('qText');
+      area.value += (kind==='image') ? `\n<img src="${url}" alt="" />\n` : `\n<video src="${url}" controls></video>\n`;
+    }
+
+    window.addEventListener('DOMContentLoaded', ()=>{
+      mountNav('nav');
+      loadCourses();
+      el('course').addEventListener('change', onCourseChange);
+      el('createQuiz').addEventListener('click', createQuiz);
+      el('addQuestion').addEventListener('click', addQuestion);
+      el('upImg').addEventListener('click', ()=>upload('image','imgFile'));
+      el('upVid').addEventListener('click', ()=>upload('video','vidFile'));
+    });
+  </script>
+</head>
+<body>
+  <div id="nav"></div>
+  <div class="container">
+    <div class="card">
+      <h2>Tạo bài kiểm tra (Giảng viên)</h2>
+      <div class="row">
+        <select id="course"></select>
+        <span class="muted">Đề đang chọn: <b id="quizId">-</b></span>
+      </div>
+      <div class="cols">
+        <input id="quizTitle" placeholder="Tiêu đề đề kiểm tra"/>
+        <input id="quizTime" placeholder="Thời gian (giây)"/>
+        <label><input type="checkbox" id="quizShuffle"/> Trộn câu hỏi</label>
+        <button id="createQuiz">Tạo đề</button>
+      </div>
+      <div class="muted" id="msg"></div>
+    </div>
+
+    <div class="card">
+      <h3>Danh sách đề của khóa</h3>
+      <table>
+        <thead><tr><th>ID</th><th>Tiêu đề</th><th>Thời gian</th><th>Số câu</th><th>Chọn</th></tr></thead>
+        <tbody id="quizzes"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>Thêm câu hỏi vào đề <span id="quizId"></span></h3>
+      <div class="row">
+        <textarea id="qText" rows="4" style="width:100%" placeholder="Nội dung câu hỏi (có thể dán thẻ <img> hoặc <video>)"></textarea>
+      </div>
+      <div class="row">
+        <input type="file" id="imgFile" accept="image/*"/>
+        <button id="upImg">Upload ảnh</button>
+        <input type="file" id="vidFile" accept="video/*"/>
+        <button id="upVid">Upload video</button>
+      </div>
+      <div class="cols">
+        <div><label>A: <input id="optA"/></label> <label><input type="radio" name="correct" id="correctA"/> Đáp án đúng</label></div>
+        <div><label>B: <input id="optB"/></label> <label><input type="radio" name="correct" id="correctB"/> Đáp án đúng</label></div>
+        <div><label>C: <input id="optC"/></label> <label><input type="radio" name="correct" id="correctC"/> Đáp án đúng</label></div>
+        <div><label>D: <input id="optD"/></label> <label><input type="radio" name="correct" id="correctD"/> Đáp án đúng</label></div>
+      </div>
+      <div class="row">
+        <input id="qPoint" placeholder="Điểm" style="width:120px" value="1"/>
+        <button id="addQuestion">Thêm câu hỏi</button>
+      </div>
+    </div>
+  </div>
+</body></html>
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tạo bài kiểm tra</title>
+  <link rel="stylesheet" href="/app/styles.css" />
+  <style>
+    body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}
+    .container{max-width:1000px;margin:24px auto;padding:0 16px;}
+    .card{border:1px solid #eee;border-radius:10px;padding:16px;margin-bottom:16px;}
+    .row{display:flex;gap:12px;flex-wrap:wrap}
+    .row > *{flex:1}
+    label{display:block;margin:6px 0 4px}
+    input[type=text], input[type=number], textarea, select{width:100%;padding:8px;border:1px solid #ddd;border-radius:8px}
+    textarea{min-height:90px}
+    .btn{display:inline-block;background:#6b5b95;color:#fff;border:none;padding:8px 14px;border-radius:8px;cursor:pointer}
+    .btn.secondary{background:#888}
+    .btn.danger{background:#d9534f}
+    .muted{color:#666}
+    .quiz-item{display:flex;justify-content:space-between;align-items:center}
+    .option-row{display:flex;gap:8px;align-items:center;margin:6px 0}
+    .option-row input[type=text]{flex:1}
+    .badge{background:#f3f4f6;border:1px solid #e5e7eb;border-radius:999px;padding:2px 8px;margin-left:8px}
+    .error{color:#d9534f}
+  </style>
+</head>
+<body>
+  <script src="/app/app-common.js"></script>
+  <div id="nav"></div>
+  <div class="container">
+    <h2>Tạo bài kiểm tra (Giảng viên)</h2>
+
+    <div class="card">
+      <div class="row">
+        <div>
+          <label>Nhập slug hoặc ID khóa học</label>
+          <input id="courseKey" type="text" placeholder="vd: khoa-demo-6 hoặc 10079" />
+        </div>
+        <div style="align-self:end">
+          <button class="btn" onclick="loadQuizzes()">Tải danh sách bài kiểm tra</button>
+        </div>
+      </div>
+      <div class="muted">Mẹo: Bạn không cần tải ảnh/video để tạo câu hỏi.</div>
+      <div id="loadStatus" class="muted" style="margin-top:6px"></div>
+    </div>
+
+    <div class="card">
+      <h3>Tạo quiz mới cho khóa học đã nhập</h3>
+      <div class="row">
+        <div>
+          <label>Tiêu đề</label>
+          <input id="quizTitle" type="text" placeholder="Ví dụ: Kiểm tra giữa kỳ" />
+        </div>
+        <div>
+          <label>Thời gian (giây)</label>
+          <input id="quizTime" type="number" value="600" min="30" />
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>Shuffle</label>
+          <select id="quizShuffle">
+            <option value="1">Có</option>
+            <option value="0">Không</option>
+          </select>
+        </div>
+        <div>
+          <label>Chấm điểm</label>
+          <select id="quizPolicy">
+            <option value="manual">manual</option>
+            <option value="auto">auto</option>
+          </select>
+        </div>
+        <div style="align-self:end">
+          <button class="btn" onclick="createQuiz()">Tạo quiz</button>
+        </div>
+      </div>
+      <div id="createQuizMsg" class="muted"></div>
+    </div>
+
+    <div class="card">
+      <h3>Danh sách quiz của khóa học</h3>
+      <div id="quizList"></div>
+    </div>
+  </div>
+
+  <script>
+    mountNav();
+
+    const API_BASE = window.API_BASE || '';
+
+    function getToken() {
+      const cands = ['token','jwt','access_token','AUTH_TOKEN'];
+      for (const k of cands) {
+        const v = localStorage.getItem(k) || sessionStorage.getItem(k);
+        if (v) return v.startsWith('Bearer ') ? v.substring(7) : v;
+      }
+      try {
+        const auth = JSON.parse(localStorage.getItem('auth') || '{}');
+        if (auth.accessToken) return auth.accessToken;
+      } catch(e){}
+      return null;
+    }
+
+    function authHeaders() {
+      const t = getToken();
+      return t ? { 'Authorization': 'Bearer ' + t } : {};
+    }
+
+    async function loadQuizzes() {
+      const key = document.getElementById('courseKey').value.trim();
+      if (!key) { alert('Nhập slug hoặc ID khóa học'); return; }
+      const statusEl = document.getElementById('loadStatus');
+      statusEl.textContent = 'Đang tải...';
+      const url = `${API_BASE}/api/quiz/course/${encodeURIComponent(key)}`;
+      try {
+        const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+        if (!res.ok) {
+          statusEl.textContent = `Lỗi tải quiz (${res.status})`;
+          return;
+        }
+        const list = await res.json();
+        statusEl.textContent = `Tìm thấy ${list.length} quiz.`;
+        renderQuizList(list);
+      } catch (e) {
+        statusEl.textContent = 'Lỗi mạng khi tải danh sách.';
+      }
+    }
+
+    function renderQuizList(list) {
+      const wrap = document.getElementById('quizList');
+      if (!list || list.length === 0) {
+        wrap.innerHTML = '<div class="muted">Chưa có bài kiểm tra. Hãy tạo quiz mới ở trên.</div>';
+        return;
+      }
+
+      wrap.innerHTML = '';
+      for (const q of list) {
+        const qid = q.id;
+        const questionCount = q.questionCount ?? q.question_count ?? 0;
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+          <div class="quiz-item">
+            <div>
+              <strong>#${qid}</strong> - ${escapeHtml(q.title || '')}
+              <span class="badge">${questionCount} câu hỏi</span>
+            </div>
+          </div>
+          <div style="margin-top:12px">
+            <h4>Thêm câu hỏi</h4>
+            <label>Nội dung</label>
+            <textarea id="q-content-${qid}" placeholder="Nhập nội dung câu hỏi"></textarea>
+
+            <div class="option-row"><input type="radio" name="correct-${qid}" value="A" checked><span>A</span><input id="optA-${qid}" type="text" placeholder="Đáp án A"></div>
+            <div class="option-row"><input type="radio" name="correct-${qid}" value="B"><span>B</span><input id="optB-${qid}" type="text" placeholder="Đáp án B"></div>
+            <div class="option-row"><input type="radio" name="correct-${qid}" value="C"><span>C</span><input id="optC-${qid}" type="text" placeholder="Đáp án C"></div>
+            <div class="option-row"><input type="radio" name="correct-${qid}" value="D"><span>D</span><input id="optD-${qid}" type="text" placeholder="Đáp án D"></div>
+
+            <div class="row">
+              <div>
+                <label>Ảnh (URL - tùy chọn)</label>
+                <input id="img-${qid}" type="text" placeholder="/uploads/images/abc.jpg (không bắt buộc)" />
+              </div>
+              <div>
+                <label>Video (URL - tùy chọn)</label>
+                <input id="vid-${qid}" type="text" placeholder="/uploads/videos/abc.mp4 (không bắt buộc)" />
+              </div>
+            </div>
+
+            <div style="margin-top:10px">
+              <button class="btn" onclick="submitQuestion(${qid})">Lưu câu hỏi</button>
+              <span id="msg-${qid}" class="muted"></span>
+            </div>
+          </div>
+        `;
+        wrap.appendChild(card);
+      }
+    }
+
+    async function createQuiz() {
+      const key = document.getElementById('courseKey').value.trim();
+      if (!key) { alert('Nhập slug hoặc ID khóa học'); return; }
+      const title = document.getElementById('quizTitle').value.trim();
+      if (!title) { alert('Nhập tiêu đề quiz'); return; }
+      const time = parseInt(document.getElementById('quizTime').value || '600', 10);
+      const shuffle = document.getElementById('quizShuffle').value === '1';
+      const policy = document.getElementById('quizPolicy').value;
+
+      // Lấy courseId từ public API
+      const listRes = await fetch(`${API_BASE}/api/quiz/course/${encodeURIComponent(key)}`);
+      let courseId = null;
+      if (listRes.ok) {
+        // Nếu có quiz, lấy courseId gián tiếp bằng cách query DB khác là khó.
+        // Ở đây gọi 1 endpoint phụ /api/public/courses hoặc fallback: nếu key là số thì đó là id.
+        if (/^\d+$/.test(key)) courseId = parseInt(key,10);
+      } else {
+        if (/^\d+$/.test(key)) courseId = parseInt(key,10);
+      }
+      if (courseId === null && /^\d+$/.test(key)) courseId = parseInt(key,10);
+
+      const msgEl = document.getElementById('createQuizMsg');
+
+      try {
+        // Thử 1: API kiểu POST /api/teacher/courses/{id}/quizzes
+        let res = await fetch(`${API_BASE}/api/teacher/courses/${courseId ?? key}/quizzes`, {
+          method: 'POST',
+          headers: { 'Content-Type':'application/json', ...authHeaders() },
+          body: JSON.stringify({ title, time_limit_sec: time, shuffle, grading_policy: policy })
+        });
+        if (!res.ok) {
+          // Thử 2: API kiểu POST /api/teacher/quizzes (body có course_id)
+          res = await fetch(`${API_BASE}/api/teacher/quizzes`, {
+            method: 'POST',
+            headers: { 'Content-Type':'application/json', ...authHeaders() },
+            body: JSON.stringify({ course_id: courseId ?? null, course_key: key, title, time_limit_sec: time, shuffle, grading_policy: policy })
+          });
+        }
+        if (!res.ok) {
+          msgEl.textContent = `Tạo quiz lỗi (${res.status})`;
+          return;
+        }
+        msgEl.textContent = 'Đã tạo quiz. Làm mới danh sách...';
+        await loadQuizzes();
+      } catch(e) {
+        msgEl.textContent = 'Lỗi mạng khi tạo quiz';
+      }
+    }
+
+    async function submitQuestion(quizId) {
+      const msgEl = document.getElementById(`msg-${quizId}`);
+      msgEl.textContent = '';
+      const content = document.getElementById(`q-content-${quizId}`).value.trim();
+      const A = document.getElementById(`optA-${quizId}`).value.trim();
+      const B = document.getElementById(`optB-${quizId}`).value.trim();
+      const C = document.getElementById(`optC-${quizId}`).value.trim();
+      const D = document.getElementById(`optD-${quizId}`).value.trim();
+      const correct = document.querySelector(`input[name="correct-${quizId}"]:checked`).value;
+      const imageUrl = document.getElementById(`img-${quizId}`).value.trim() || null;
+      const videoUrl = document.getElementById(`vid-${quizId}`).value.trim() || null;
+
+      if (!content) { msgEl.textContent = 'Nhập nội dung câu hỏi'; msgEl.className='error'; return; }
+      if ([A,B].some(x=>!x)) { msgEl.textContent = 'Cần ít nhất 2 đáp án (A,B)'; msgEl.className='error'; return; }
+
+      const options = [
+        { label:'A', content:A, is_correct: correct==='A' },
+        { label:'B', content:B, is_correct: correct==='B' },
+        { label:'C', content:C || '', is_correct: correct==='C' },
+        { label:'D', content:D || '', is_correct: correct==='D' },
+      ].filter(o => o.content && o.content.length>0);
+
+      const payload = { content, image_url: imageUrl, video_url: videoUrl, options };
+
+      try {
+        const res = await fetch(`${API_BASE}/api/teacher/quizzes/${quizId}/questions`, {
+          method: 'POST',
+          headers: { 'Content-Type':'application/json', ...authHeaders() },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+          msgEl.textContent = `Lưu câu hỏi lỗi (${res.status})`;
+          msgEl.className='error';
+          return;
+        }
+        msgEl.className='muted';
+        msgEl.textContent = 'Đã lưu câu hỏi';
+        // Làm mới danh sách để cập nhật questionCount
+        await loadQuizzes();
+      } catch(e) {
+        msgEl.textContent = 'Lỗi mạng khi lưu câu hỏi';
+        msgEl.className='error';
+      }
+    }
+
+    function escapeHtml(s){
+      return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
+    }
+  </script>
+</body>
+</html>

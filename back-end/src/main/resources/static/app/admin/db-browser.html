@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="vi"><head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>DB Browser (Admin)</title>
+  <link rel="stylesheet" href="/app/app.css"/>
+  <style>
+    .layout{display:grid;grid-template-columns:260px 1fr;gap:12px}
+    .sidebar{background:#141a33;border:1px solid #232b55;border-radius:8px;padding:12px;max-height:75vh;overflow:auto}
+  </style>
+  <script type="module">
+    import {mountNav, api} from '/app/app-common.js';
+    const el = id => document.getElementById(id);
+    let current = null; let tables = [];
+    async function loadTables(){
+      const res = await api('/api/admin/db/tables');
+      tables = res.tables || []; const list = el('tables');
+      list.innerHTML = tables.map(t=>`<div><button class="btn" data-t="${t}">${t}</button></div>`).join('');
+      list.querySelectorAll('button').forEach(b=>b.onclick=()=>openTable(b.dataset.t));
+    }
+    async function openTable(name, offset=0){
+      current = name; el('cur').textContent = name;
+      const res = await api(`/api/admin/db/table/${encodeURIComponent(name)}?offset=${offset}&limit=50`);
+      const cols = res.columns || []; const rows = res.rows || [];
+      el('grid').innerHTML = `<table><thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead>`+
+        `<tbody>${rows.map(r=>`<tr>${r.map(v=>`<td>${v??''}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+    }
+    window.addEventListener('DOMContentLoaded', ()=>{ mountNav('nav'); loadTables(); });
+  </script>
+</head>
+<body>
+  <div id="nav"></div>
+  <div class="container layout">
+    <div class="sidebar">
+      <h3>Bảng (schema dbo)</h3>
+      <div id="tables" class="grid" style="gap:6px"></div>
+    </div>
+    <div>
+      <div class="card">
+        <div class="row" style="justify-content:space-between;align-items:center">
+          <h3>Bảng: <span id="cur" class="muted">(chưa chọn)</span></h3>
+          <div class="row"><button onclick="history.back()" class="btn">Quay lại</button></div>
+        </div>
+        <div id="grid" class="mt-2" style="overflow:auto"></div>
+      </div>
+    </div>
+  </div>
+</body></html>
+

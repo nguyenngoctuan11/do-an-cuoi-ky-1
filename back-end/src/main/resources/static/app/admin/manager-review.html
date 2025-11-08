@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="vi"><head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Duyệt khóa học (Quản lý)</title>
+  <link rel="stylesheet" href="/app/app.css"/>
+  <script type="module">
+    import {mountNav, api, requireAuth} from '/app/app-common.js';
+    const rows = ()=>document.getElementById('rows');
+    async function load(){
+      if(!requireAuth(['MANAGER'])) return;
+      const list = await api('/api/manager/courses/pending');
+      rows().innerHTML = (list||[]).map(c=>`<tr>
+        <td>${c.id}</td>
+        <td>${c.title}</td>
+        <td>${c.slug}</td>
+        <td>${c.createdByEmail||''}</td>
+        <td class="row">
+          <a class="btn" href="/app/admin/manager-review-detail.html?id=${c.id}">Xem chi tiết</a>
+          <button data-id="${c.id}" class="approve">Duyệt</button>
+          <button data-id="${c.id}" class="reject">Từ chối</button>
+        </td>
+      </tr>`).join('') || '<tr><td colspan="5" class="muted">Không có yêu cầu</td></tr>';
+      document.querySelectorAll('.approve').forEach(b=>b.onclick=async e=>{ const id=e.target.dataset.id; await api(`/api/manager/courses/${id}/approve`,{method:'POST'}); load(); });
+      document.querySelectorAll('.reject').forEach(b=>b.onclick=async e=>{ const id=e.target.dataset.id; const note = prompt('Lý do từ chối? (tùy chọn)',''); await api(`/api/manager/courses/${id}/reject`,{method:'POST', body: JSON.stringify({note}) }); load(); });
+    }
+    window.addEventListener('DOMContentLoaded', ()=>{ mountNav('nav'); load(); });
+  </script>
+</head>
+<body>
+  <div id="nav"></div>
+  <div class="container">
+    <div class="card">
+      <h2>Duyệt khóa học (chờ duyệt)</h2>
+      <table>
+        <thead><tr><th>ID</th><th>Tiêu đề</th><th>Slug</th><th>Người tạo</th><th>Hành động</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </div>
+</body></html>
+

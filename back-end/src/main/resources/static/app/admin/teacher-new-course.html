@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="vi"><head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Tạo khóa học (Giảng viên)</title>
+  <link rel="stylesheet" href="/app/app.css"/>
+  <script type="module">
+    import {mountNav, api, token, requireAuth, qs} from '/app/app-common.js';
+    const el = id => document.getElementById(id);
+
+    // ====== Biên soạn chi tiết (modules/lessons) ======
+    async function loadModules(courseId){
+      const box = el('editorBody'); if(!box) return;
+      const list = await api(`/api/courses/${courseId}/modules`);
+      box.innerHTML = (list||[]).map(m => `
+        <div class="card">
+          <h3>Phần: ${m.title} (#${m.id})</h3>
+          <div class="row" style="margin:6px 0">
+            <input id="lTitle-${m.id}" placeholder="Tiêu đề bài học"/>
+            <select id="lType-${m.id}"><option value="video">video</option><option value="article">article</option><option value="quiz">quiz</option></select>
+            <input id="lDur-${m.id}" placeholder="Giây" style="width:100px"/>
+            <button data-mid="${m.id}" class="addLesson">Thêm bài học</button>
+          </div>
+          <table>
+            <thead><tr><th>Bài học</th><th>Loại</th><th>Video</th></tr></thead>
+            <tbody>
+              ${(m.lessons||[]).map(l => `
+                <tr>
+                  <td>${l.title} (#${l.id})</td>
+                  <td>${l.type||''}</td>
+                  <td>
+                    <input type="file" id="vid-${l.id}" accept="video/*"/>
+                    <button data-lid="${l.id}" class="uploadVideo">Upload video</button>
+                  </td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>`).join('') || '<div class="muted">Chưa có phần nào.</div>';
+
+      box.querySelectorAll('.addLesson').forEach(b=> b.onclick = async (e)=>{
+        const mid = e.target.getAttribute('data-mid');
+        const payload = {
+          title: el(`lTitle-${mid}`).value.trim(),
+          type: el(`lType-${mid}`).value,
+          durationSeconds: Number(el(`lDur-${mid}`).value||0),
+          status: 'draft'
+        };
+        await api(`/api/modules/${mid}/lessons`, {method:'POST', body: JSON.stringify(payload)});
+        loadModules(courseId);
+      });
+      box.querySelectorAll('.uploadVideo').forEach(b=> b.onclick = async (e)=>{
+        const lid = e.target.getAttribute('data-lid');
+        const inp = el(`vid-${lid}`);
+        if(!inp.files.length){ alert('Chọn file video'); return; }
+        const fd = new FormData(); fd.append('file', inp.files[0]);
+        const r = await fetch('/api/upload/video', { method:'POST', headers: token()?{ Authorization:`Bearer ${token()}` }: {}, body: fd });
+        const t = await r.text(); let d; try{ d = t? JSON.parse(t): null;}catch{ d=null; }
+        if(!r.ok){ alert((d && d.message)||r.statusText); return; }
+        await api(`/api/lessons/${lid}/assets`, { method:'POST', body: JSON.stringify({ kind:'video', url: d.url, mime_type: inp.files[0].type||'video/mp4' }) });
+        alert('Đã gắn video cho bài học');
+      });
+    }
+
+    function showEditor(courseId){
+      const ed = el('editor'); if(!ed) return; ed.style.display='block';
+      el('cid').textContent = courseId;
+      el('addModuleBtn').onclick = async ()=>{
+        const payload = { title: el('mTitle').value.trim(), sortOrder: Number(el('mSort').value||0) };
+        await api(`/api/courses/${courseId}/modules`, { method:'POST', body: JSON.stringify(payload) });
+        el('mTitle').value=''; el('mSort').value='';
+        loadModules(courseId);
+      };
+      loadModules(courseId);
+    }
+    async function upload(kind,inputId){
+      const file = el(inputId).files[0]; if(!file) return null;
+      const fd = new FormData(); fd.append('file', file);
+      const r = await fetch(`/api/upload/${kind}`, { method:'POST', headers: token()?{ Authorization:`Bearer ${token()}` }: {}, body: fd });
+      const text = await r.text();
+      let data; try { data = text ? JSON.parse(text) : null; } catch { data = null; }
+      if(!r.ok) throw new Error((data && (data.message||data)) || r.statusText);
+      return data && data.url ? data.url : null;
+    }
+    async function create(){
+      try{
+        if(!requireAuth(['TEACHER','MANAGER'])) return;
+        el('createBtn').disabled = true; el('msg').textContent = 'Đang tạo...';
+        const body = {
+          title: el('title').value.trim(),
+          slug: el('slug').value.trim(),
+          shortDesc: el('short').value.trim(),
+          language: el('lang').value,
+          level: el('level').value,
+          status: 'draft',
+          price: el('price').value? Number(el('price').value): null
+        };
+        const course = await api('/api/teacher/courses', { method:'POST', body: JSON.stringify(body) });
+        el('msg').textContent = `Đã tạo ID=${course.id}`;
+        if(el('thumb').files.length){
+          const url = await upload('image','thumb');
+          if(url){ await api(`/api/teacher/courses/${course.id}/thumbnail`, { method:'POST', body: JSON.stringify({url}) }); }
+        }
+        el('submitBtn').onclick = async ()=>{ try{ await api(`/api/teacher/courses/${course.id}/submit`, { method:'POST' }); el('msg').textContent = 'Đã gửi chờ duyệt'; }catch(e){ el('msg').textContent = 'Lỗi gửi duyệt: ' + (e.message||e); } };
+        el('submitBtn').disabled = false;
+        // Mở trình biên soạn chi tiết ngay sau khi tạo
+        showEditor(course.id);
+      }catch(e){
+        console.error(e); el('msg').textContent = 'Lỗi tạo: ' + (e.message||e);
+        if(String(e).includes('403')) alert('Bạn cần đăng nhập với vai trò TEACHER/MANAGER');
+      }finally{
+        el('createBtn').disabled = false;
+      }
+    }
+    window.addEventListener('DOMContentLoaded', ()=>{
+      mountNav('nav');
+      document.getElementById('createBtn').addEventListener('click', create);
+      const cid = Number(qs('id'));
+      if(cid){ showEditor(cid); el('msg').textContent = `Đang chỉnh sửa khóa học ID=${cid}`; }
+    });
+  </script>
+</head>
+<body>
+  <div id="nav"></div>
+  <div class="container">
+    <div class="card">
+      <h2>Tạo khóa học (Giảng viên)</h2>
+      <div class="cols">
+        <input id="title" placeholder="Tiêu đề"/>
+        <input id="slug" placeholder="Slug duy nhất"/>
+        <input id="short" placeholder="Mô tả ngắn"/>
+        <select id="lang"><option value="vi">vi</option><option value="en">en</option></select>
+        <select id="level"><option>beginner</option><option>intermediate</option><option>advanced</option></select>
+        <input id="price" placeholder="Giá"/>
+        <div>
+          <label>Thumbnail: <input type="file" id="thumb" accept="image/*"/></label>
+        </div>
+      </div>
+      <div class="row">
+        <button id="createBtn">Tạo</button>
+        <button id="submitBtn" disabled>Gửi chờ duyệt</button>
+        <span id="msg" class="muted"></span>
+      </div>
+      <div class="muted">Cần đăng nhập (teacher/manager) – file lưu tại /uploads/…</div>
+    </div>
+    <div class="card" id="editor" style="display:none">
+      <h2>Biên soạn chi tiết (Course ID: <span id="cid"></span>)</h2>
+      <div class="row">
+        <input id="mTitle" placeholder="Tiêu đề phần"/>
+        <input id="mSort" placeholder="Thứ tự" style="width:120px"/>
+        <button id="addModuleBtn">Thêm phần</button>
+      </div>
+      <div id="editorBody"></div>
+    </div>
+  </div>
+  <script>
+    (function(){
+      function el(id){ return document.getElementById(id); }
+      function qs(name){ try{ return new URLSearchParams(location.search).get(name);}catch{return null;}}
+      async function api(path, opts){
+        const token = localStorage.getItem('token');
+        const baseHeaders = {'Content-Type':'application/json'};
+        const headers = Object.assign({}, baseHeaders, (opts&&opts.headers)||{});
+        if(token) headers['Authorization'] = `Bearer ${token}`;
+        const r = await fetch(path, Object.assign({}, opts||{}, { headers }));
+        const t = await r.text(); let d; try{ d = t? JSON.parse(t): null;}catch{ d=t; }
+        if(!r.ok) throw new Error((d && (d.message||d)) || r.statusText);
+        return d;
+      }
+      function ensureButtons(){
+        const row = document.querySelector('.card .row'); if(!row) return;
+        if(!el('updateBtn')){ const b=document.createElement('button'); b.id='updateBtn'; b.style.display='none'; b.textContent='Cập nhật'; row.insertBefore(b, row.lastElementChild); }
+        if(!el('deleteBtn')){ const b=document.createElement('button'); b.id='deleteBtn'; b.style.display='none'; b.textContent='Xóa'; row.insertBefore(b, row.lastElementChild); }
+      }
+      async function onReady(){
+        ensureButtons();
+        const cid = Number(qs('id'))||0; if(!cid) return;
+        const ub = el('updateBtn'); const db = el('deleteBtn'); if(ub) ub.style.display='inline-block'; if(db) db.style.display='inline-block';
+        // Load current meta (best-effort)
+        try{
+          const d = await api(`/api/teacher/courses/${cid}`);
+          if(el('title')) el('title').value = d.title||'';
+          if(el('slug')) el('slug').value = d.slug||'';
+          if(el('short')) el('short').value = d.shortDesc||'';
+          if(el('lang')) el('lang').value = d.language||'vi';
+          if(el('level')) el('level').value = d.level||'beginner';
+          if(el('price')) el('price').value = d.price!=null? d.price: '';
+          // Hiển thị thumbnail hiện có (nếu có)
+          if(d.thumbnailUrl){
+            let pv = document.getElementById('thumbPreview');
+            if(!pv){ pv = document.createElement('img'); pv.id='thumbPreview'; pv.style.maxWidth='200px'; pv.style.display='block'; pv.style.marginTop='6px'; document.getElementById('thumb').parentElement.appendChild(pv); }
+            const base = '';
+            pv.src = d.thumbnailUrl.startsWith('/') ? `${base}${d.thumbnailUrl}` : d.thumbnailUrl;
+          }
+        }catch(e){ const msg = el('msg'); if(msg) msg.textContent = 'Không thể tải thông tin khóa học: ' + (e && e.message ? e.message : e); }
+        if(ub) ub.onclick = async function(){
+          const body = { title: el('title')?.value?.trim(), slug: el('slug')?.value?.trim(), shortDesc: el('short')?.value?.trim(), language: el('lang')?.value, level: el('level')?.value, price: el('price')?.value? Number(el('price').value): null };
+          try{
+            // thumbnail: optional is handled by original module script if needed
+            await api(`/api/teacher/courses/${cid}`, { method:'PATCH', body: JSON.stringify(body) });
+            const msg = el('msg'); if(msg) msg.textContent='Đã cập nhật khóa học';
+          }catch(e){ const msg = el('msg'); if(msg) msg.textContent='Lỗi cập nhật: '+(e.message||e); }
+        };
+        // Cho phép gửi duyệt khi đang chỉnh sửa
+        const sb = document.getElementById('submitBtn');
+        if(sb){ sb.disabled = false; sb.onclick = async ()=>{ try{ await api(`/api/teacher/courses/${cid}/submit`, { method:'POST' }); const msg = el('msg'); if(msg) msg.textContent='Đã gửi chờ duyệt'; }catch(e){ const msg = el('msg'); if(msg) msg.textContent='Lỗi gửi duyệt: '+(e.message||e); } } }
+        if(db) db.onclick = async function(){ if(!confirm('Xóa khóa học này?')) return; await api(`/api/teacher/courses/${cid}`, { method:'DELETE' }); alert('Đã xóa'); location.href='/app/admin/teacher-courses.html'; };
+      }
+      document.addEventListener('DOMContentLoaded', onReady);
+    })();
+  </script>
+</body></html>

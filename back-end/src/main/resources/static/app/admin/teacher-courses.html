@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="vi"><head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Khóa học của tôi</title>
+  <link rel="stylesheet" href="/app/app.css"/>
+  <script type="module">
+    import {mountNav, api, requireAuth} from '/app/app-common.js';
+    const rows = ()=>document.getElementById('rows');
+    async function load(){
+      if(!requireAuth(['TEACHER','MANAGER'])) return;
+      const list = await api('/api/teacher/courses/my');
+      rows().innerHTML = (list||[]).map(c=>`<tr>
+        <td>${c.id}</td>
+        <td>${c.title}</td>
+        <td>${c.slug}</td>
+        <td>${c.status||''}</td>
+        <td>${c.approvalStatus||''}</td>
+        <td>${(c.createdAt||'').toString().replace('T',' ')}</td>
+        <td class="row">
+          <a class="btn" href="/app/admin/teacher-new-course.html?id=${c.id}">Chỉnh sửa</a>
+          <button class="btn submit" data-id="${c.id}">Gửi duyệt</button>
+          <button class="btn danger delete" data-id="${c.id}">Xóa</button>
+        </td>
+      </tr>`).join('') || '<tr><td colspan="7" class="muted">Chưa có khóa học nào</td></tr>';
+
+      document.querySelectorAll('.submit').forEach(b=> b.onclick = async (e)=>{
+        const id = e.target.getAttribute('data-id');
+        await api(`/api/teacher/courses/${id}/submit`, {method:'POST'});
+        alert('Đã gửi chờ duyệt');
+        load();
+      });
+      document.querySelectorAll('.delete').forEach(b=> b.onclick = async (e)=>{
+        const id = e.target.getAttribute('data-id');
+        if(!confirm('Xóa khóa học này?')) return;
+        await api(`/api/teacher/courses/${id}`, {method:'DELETE'});
+        load();
+      });
+    }
+    window.addEventListener('DOMContentLoaded', ()=>{ mountNav('nav'); load(); document.getElementById('refresh').onclick=load; });
+  </script>
+</head>
+<body>
+  <div id="nav"></div>
+  <div class="container">
+    <div class="card">
+      <h2>Khóa học của tôi</h2>
+      <div class="row">
+        <button id="refresh">Làm mới</button>
+        <a class="btn" href="/app/admin/teacher-new-course.html">Tạo khóa học</a>
+      </div>
+      <table>
+        <thead><tr><th>ID</th><th>Tiêu đề</th><th>Slug</th><th>Trạng thái</th><th>Duyệt</th><th>Tạo lúc</th><th>Thao tác</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </div>
+</body></html>
+

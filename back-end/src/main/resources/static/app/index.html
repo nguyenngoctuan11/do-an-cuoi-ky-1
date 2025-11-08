@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>LMS Admin - Tổng quan</title>
+  <link rel="stylesheet" href="/app/app.css"/>
+  <script type="module">
+    import {mountNav, api} from './app-common.js';
+    window.addEventListener('DOMContentLoaded', async () => {
+      mountNav('nav');
+      try {
+        const info = await api('/api/public/dbinfo');
+        document.getElementById('dbinfo').textContent = `Server: ${info.server_name}, DB: ${info.db_name}`;
+      } catch (e) { document.getElementById('dbinfo').textContent = e.message }
+    });
+  </script>
+</head>
+<body>
+  <div id="nav"></div>
+  <div class="container">
+    <div class="card">
+      <h2>Tổng quan</h2>
+      <div class="muted" id="dbinfo">Đang tải thông tin DB...</div>
+      <p>Đi đến mục <a href="/app/courses.html">Quản lý khóa học</a> để thao tác.</p>
+    </div>
+  </div>
+</body>
+</html>
