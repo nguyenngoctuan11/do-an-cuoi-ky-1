@@ -1,42 +1,77 @@
 <!doctype html>
-<html lang="vi"><head>
+<html lang="vi">
+<head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Duyệt khóa học (Quản lý)</title>
   <link rel="stylesheet" href="/app/app.css"/>
   <script type="module">
-    import {mountNav, api, requireAuth} from '/app/app-common.js';
+    import {mountNav, mountAdminMenu, mountAdminUser, api, requireAuth} from '/app/app-common.js';
     const rows = ()=>document.getElementById('rows');
     async function load(){
       if(!requireAuth(['MANAGER'])) return;
       const list = await api('/api/manager/courses/pending');
       rows().innerHTML = (list||[]).map(c=>`<tr>
-        <td>${c.id}</td>
+        <td>#${c.id}</td>
         <td>${c.title}</td>
         <td>${c.slug}</td>
         <td>${c.createdByEmail||''}</td>
         <td class="row">
-          <a class="btn" href="/app/admin/manager-review-detail.html?id=${c.id}">Xem chi tiết</a>
-          <button data-id="${c.id}" class="approve">Duyệt</button>
-          <button data-id="${c.id}" class="reject">Từ chối</button>
+          <a class="btn secondary" href="/app/admin/manager-review-detail.html?id=${c.id}">Xem chi tiết</a>
+          <button data-id="${c.id}" class="btn approve">Duyệt</button>
+          <button data-id="${c.id}" class="btn danger reject">Từ chối</button>
         </td>
-      </tr>`).join('') || '<tr><td colspan="5" class="muted">Không có yêu cầu</td></tr>';
+      </tr>`).join('') || '<tr><td colspan="5" class="muted">Chưa có khóa học chờ duyệt</td></tr>';
       document.querySelectorAll('.approve').forEach(b=>b.onclick=async e=>{ const id=e.target.dataset.id; await api(`/api/manager/courses/${id}/approve`,{method:'POST'}); load(); });
       document.querySelectorAll('.reject').forEach(b=>b.onclick=async e=>{ const id=e.target.dataset.id; const note = prompt('Lý do từ chối? (tùy chọn)',''); await api(`/api/manager/courses/${id}/reject`,{method:'POST', body: JSON.stringify({note}) }); load(); });
     }
-    window.addEventListener('DOMContentLoaded', ()=>{ mountNav('nav'); load(); });
+    window.addEventListener('DOMContentLoaded', ()=>{
+      mountNav('nav');
+      mountAdminMenu('adminMenu','manager-review');
+      mountAdminUser('adminUserCard');
+      load();
+    });
   </script>
 </head>
-<body>
-  <div id="nav"></div>
-  <div class="container">
-    <div class="card">
-      <h2>Duyệt khóa học (chờ duyệt)</h2>
-      <table>
-        <thead><tr><th>ID</th><th>Tiêu đề</th><th>Slug</th><th>Người tạo</th><th>Hành động</th></tr></thead>
-        <tbody id="rows"></tbody>
-      </table>
+<body class="admin-body">
+  <div class="admin-shell">
+    <aside class="admin-sidebar">
+      <div class="admin-brand">
+        <span class="eyebrow">Bảng điều khiển</span>
+        <strong>Quản lý LMS</strong>
+        <p class="muted">Không gian dành cho giảng viên & quản lý</p>
+      </div>
+      <div id="adminUserCard" class="admin-user-card"></div>
+      <nav id="adminMenu" class="admin-menu"></nav>
+      <div class="admin-sidebar-footer">
+        <a class="text-link" href="/app/index.html">← Về trang tổng quan</a>
+      </div>
+    </aside>
+    <div class="admin-main">
+      <div id="nav" data-variant="compact"></div>
+      <main class="admin-content">
+        <div class="admin-page-header">
+          <p class="muted">Quy trình kiểm duyệt</p>
+          <h1>Khóa học chờ duyệt</h1>
+        </div>
+        <div class="card">
+          <div class="row" style="justify-content:space-between;align-items:center">
+            <div>
+              <h2 style="margin:0">Danh sách đợi phê duyệt</h2>
+              <p class="muted" style="margin:4px 0 0">Theo dõi và xử lý yêu cầu nhanh chóng.</p>
+            </div>
+            <button class="btn secondary" onclick="window.location.reload()">Làm mới</button>
+          </div>
+          <div style="overflow:auto;margin-top:16px">
+            <table>
+              <thead><tr><th>ID</th><th>Tiêu đề</th><th>Slug</th><th>Người tạo</th><th>Hành động</th></tr></thead>
+              <tbody id="rows"></tbody>
+            </table>
+          </div>
+        </div>
+      </main>
     </div>
   </div>
-</body></html>
+</body>
+</html>
 

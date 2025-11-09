@@ -1,28 +1,31 @@
 <!doctype html>
-<html lang="vi"><head>
+<html lang="vi">
+<head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Khóa học của tôi</title>
   <link rel="stylesheet" href="/app/app.css"/>
   <script type="module">
-    import {mountNav, api, requireAuth} from '/app/app-common.js';
+    import {mountNav, mountAdminMenu, mountAdminUser, api, requireAuth} from '/app/app-common.js';
     const rows = ()=>document.getElementById('rows');
     async function load(){
       if(!requireAuth(['TEACHER','MANAGER'])) return;
       const list = await api('/api/teacher/courses/my');
       rows().innerHTML = (list||[]).map(c=>`<tr>
-        <td>${c.id}</td>
-        <td>${c.title}</td>
-        <td>${c.slug}</td>
-        <td>${c.status||''}</td>
-        <td>${c.approvalStatus||''}</td>
+        <td>#${c.id}</td>
+        <td>
+          <div>${c.title}</div>
+          <div class="muted" style="font-size:.8rem">${c.slug}</div>
+        </td>
+        <td><span class="badge ${c.status==='published'?'ok':''}">${c.status||''}</span></td>
+        <td><span class="badge ${c.approvalStatus==='approved'?'ok':(c.approvalStatus==='rejected'?'err':'')}">${c.approvalStatus||'draft'}</span></td>
         <td>${(c.createdAt||'').toString().replace('T',' ')}</td>
         <td class="row">
-          <a class="btn" href="/app/admin/teacher-new-course.html?id=${c.id}">Chỉnh sửa</a>
+          <a class="btn secondary" href="/app/admin/teacher-new-course.html?id=${c.id}">Chỉnh sửa</a>
           <button class="btn submit" data-id="${c.id}">Gửi duyệt</button>
           <button class="btn danger delete" data-id="${c.id}">Xóa</button>
         </td>
-      </tr>`).join('') || '<tr><td colspan="7" class="muted">Chưa có khóa học nào</td></tr>';
+      </tr>`).join('') || '<tr><td colspan="6" class="muted">Chưa có khóa học nào.</td></tr>';
 
       document.querySelectorAll('.submit').forEach(b=> b.onclick = async (e)=>{
         const id = e.target.getAttribute('data-id');
@@ -37,23 +40,56 @@
         load();
       });
     }
-    window.addEventListener('DOMContentLoaded', ()=>{ mountNav('nav'); load(); document.getElementById('refresh').onclick=load; });
+    window.addEventListener('DOMContentLoaded', ()=>{
+      mountNav('nav');
+      mountAdminMenu('adminMenu','teacher-courses');
+      mountAdminUser('adminUserCard');
+      load();
+      document.getElementById('refresh').onclick=load;
+    });
   </script>
 </head>
-<body>
-  <div id="nav"></div>
-  <div class="container">
-    <div class="card">
-      <h2>Khóa học của tôi</h2>
-      <div class="row">
-        <button id="refresh">Làm mới</button>
-        <a class="btn" href="/app/admin/teacher-new-course.html">Tạo khóa học</a>
+<body class="admin-body">
+  <div class="admin-shell">
+    <aside class="admin-sidebar">
+      <div class="admin-brand">
+        <span class="eyebrow">Bảng điều khiển</span>
+        <strong>Không gian giảng viên</strong>
+        <p class="muted">Theo dõi toàn bộ khóa học của bạn.</p>
       </div>
-      <table>
-        <thead><tr><th>ID</th><th>Tiêu đề</th><th>Slug</th><th>Trạng thái</th><th>Duyệt</th><th>Tạo lúc</th><th>Thao tác</th></tr></thead>
-        <tbody id="rows"></tbody>
-      </table>
+      <div id="adminUserCard" class="admin-user-card"></div>
+      <nav id="adminMenu" class="admin-menu"></nav>
+      <div class="admin-sidebar-footer">
+        <a class="text-link" href="/app/index.html">← Về trang tổng quan</a>
+      </div>
+    </aside>
+    <div class="admin-main">
+      <div id="nav" data-variant="compact"></div>
+      <main class="admin-content">
+        <div class="admin-page-header">
+          <p class="muted">Tổng quan nhanh</p>
+          <h1>Khóa học của tôi</h1>
+        </div>
+        <div class="card">
+          <div class="row" style="justify-content:space-between;align-items:center">
+            <div>
+              <h2 style="margin:0">Danh sách khóa học</h2>
+              <p class="muted" style="margin:4px 0 0">Quản lý bản nháp, trạng thái và gửi duyệt.</p>
+            </div>
+            <div class="row">
+              <button id="refresh" class="btn ghost">Làm mới</button>
+              <a class="btn" href="/app/admin/teacher-new-course.html">+ Tạo khóa học</a>
+            </div>
+          </div>
+          <div style="overflow:auto;margin-top:16px">
+            <table>
+              <thead><tr><th>ID</th><th>Khóa học</th><th>Trạng thái</th><th>Duyệt</th><th>Tạo lúc</th><th>Thao tác</th></tr></thead>
+              <tbody id="rows"></tbody>
+            </table>
+          </div>
+        </div>
+      </main>
     </div>
   </div>
-</body></html>
-
+</body>
+</html>
