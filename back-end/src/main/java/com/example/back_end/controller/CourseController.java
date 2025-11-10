@@ -22,10 +22,29 @@ public class CourseController {
         return ResponseEntity.ok(courseService.list(limit));
     }
 
+    @GetMapping("/{id}")
+    public ResponseEntity<CourseDtos.CourseResponse> get(@PathVariable Long id) {
+        return ResponseEntity.ok(courseService.get(id));
+    }
+
     @PostMapping
     @PreAuthorize("hasAnyRole('TEACHER','MANAGER')")
     public ResponseEntity<CourseDtos.CourseResponse> create(@RequestBody CourseDtos.CreateRequest req) {
         return ResponseEntity.ok(courseService.create(req));
+    }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('TEACHER','MANAGER')")
+    public ResponseEntity<CourseDtos.CourseResponse> update(@PathVariable Long id,
+                                                            @RequestBody CourseDtos.UpdateRequest req) {
+        return ResponseEntity.ok(courseService.update(id, req));
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('TEACHER','MANAGER')")
+    public ResponseEntity<Void> delete(@PathVariable Long id) {
+        courseService.delete(id);
+        return ResponseEntity.noContent().build();
     }
 }
 

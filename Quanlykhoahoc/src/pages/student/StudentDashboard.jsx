@@ -11,8 +11,11 @@ export default function StudentDashboard(){
     if(!token){ window.location.href='/login'; return; }
     const headers = { 'Content-Type':'application/json', Authorization:`Bearer ${token}` };
     fetch(`${API}/api/student/me`, { headers }).then(r=>r.json()).then(setMe).catch(()=>{});
-    fetch(`${API}/api/student/enrollments`, { headers }).then(r=>r.json()).then(setCourses).catch(e=>setError(String(e)));
-  },[]);
+    fetch(`${API}/api/student/enrollments`, { headers })
+      .then(r=>r.json())
+      .then(setCourses)
+      .catch(e=>setError(String(e)));
+  },[API]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-10">
@@ -28,6 +31,7 @@ export default function StudentDashboard(){
 
       <div className="mt-8">
         <div className="font-medium text-stone-900 mb-3">Khóa học đã đăng ký</div>
+        {error && <div className="mb-3 text-sm text-red-600">{error}</div>}
         {courses.length === 0 && (
           <div className="text-stone-500 text-sm">Bạn chưa đăng ký khóa học nào.</div>
         )}

@@ -1,6 +1,7 @@
 package com.example.back_end.service;
 
 import com.example.back_end.dto.AuthDtos;
+import com.example.back_end.dto.ProfileDtos;
 import com.example.back_end.model.Role;
 import com.example.back_end.model.User;
 import com.example.back_end.repository.RoleRepository;
@@ -13,7 +14,6 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -22,12 +22,14 @@ public class AuthService {
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final ProfileService profileService;
 
-    public AuthService(UserRepository userRepository, RoleRepository roleRepository, PasswordEncoder passwordEncoder, JwtService jwtService) {
+    public AuthService(UserRepository userRepository, RoleRepository roleRepository, PasswordEncoder passwordEncoder, JwtService jwtService, ProfileService profileService) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
+        this.profileService = profileService;
     }
 
     public AuthDtos.AuthResponse register(AuthDtos.RegisterRequest req) {
@@ -42,7 +44,10 @@ public class AuthService {
         u.setEmail(req.email);
         u.setPasswordHash(passwordEncoder.encode(req.password));
         u.setFullName(req.fullName);
+        u.setUsername(profileService.generateInitialUsername(req.fullName, req.email));
         u.setLocale("vi");
+        u.setBio(null);
+        u.setTwoFactorEnabled(false);
         u.setStatus("active");
         u.setCreatedAt(LocalDateTime.now());
         u.setUpdatedAt(LocalDateTime.now());
@@ -71,20 +76,19 @@ public class AuthService {
         String token = jwtService.generate(u.getEmail(), Map.of("uid", u.getId(), "roles", roleCodes));
         AuthDtos.AuthResponse res = new AuthDtos.AuthResponse();
         res.accessToken = token;
+        res.userId = u.getId();
         res.email = u.getEmail();
         res.fullName = u.getFullName();
+        res.username = u.getUsername();
+        res.bio = u.getBio();
+        res.avatarUrl = u.getAvatarUrl();
+        res.twoFactorEnabled = u.isTwoFactorEnabled();
+        res.hasPassword = u.getPasswordHash() != null && !u.getPasswordHash().isBlank();
         res.roles = new AuthDtos.ListRole(roleCodes);
         return res;
     }
 
-    public Map<String, Object> me(String email) {
-        User u = userRepository.findByEmailIgnoreCase(email).orElseThrow();
-        List<String> roleCodes = u.getRoles().stream().map(Role::getCode).collect(Collectors.toList());
-        return Map.of(
-                "id", u.getId(),
-                "email", u.getEmail(),
-                "fullName", u.getFullName(),
-                "roles", roleCodes
-        );
+    public ProfileDtos.ProfileResponse me(String email) {
+        return profileService.getProfile(email);
     }
 }

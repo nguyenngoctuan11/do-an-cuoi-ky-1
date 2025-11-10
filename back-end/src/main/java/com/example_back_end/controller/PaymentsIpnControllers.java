@@ -23,16 +23,17 @@ public class PaymentsIpnControllers {
         // Collect vnp_* params
         SortedMap<String,String> params = new TreeMap<>();
         String secureHash = null;
-        req.getParameterMap().forEach((k, arr) -> {
-            if (k.startsWith("vnp_")) {
-                String val = arr != null && arr.length > 0 ? arr[0] : null;
-                if ("vnp_SecureHash".equals(k)) {
-                    secureHash = val;
-                } else if (!"vnp_SecureHashType".equals(k)) {
-                    params.put(k, val);
-                }
+        for (Map.Entry<String, String[]> entry : req.getParameterMap().entrySet()) {
+            String k = entry.getKey();
+            if (!k.startsWith("vnp_")) continue;
+            String[] arr = entry.getValue();
+            String val = arr != null && arr.length > 0 ? arr[0] : null;
+            if ("vnp_SecureHash".equals(k)) {
+                secureHash = val;
+            } else if (!"vnp_SecureHashType".equals(k)) {
+                params.put(k, val);
             }
-        });
+        }
         String data = buildQuery(params);
         String hash = hmacSHA512(vnpHashSecret, data);
         if (secureHash != null && secureHash.equalsIgnoreCase(hash)) {

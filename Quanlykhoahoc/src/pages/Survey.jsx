@@ -11,7 +11,7 @@ export default function Survey() {
 
   useEffect(() => {
     fetch(`${API}/api/public/survey`).then(r=>r.json()).then(setQs).catch(()=>setQs([]));
-  }, []);
+  }, [API]);
 
   const onSubmit = async (e) => {
     e.preventDefault(); setError("");

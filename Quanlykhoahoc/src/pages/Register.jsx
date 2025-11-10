@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 export default function Register() {
   const nav = useNavigate();
@@ -9,6 +10,7 @@ export default function Register() {
   const [submitting, setSubmitting] = useState(false);
   const [otpPhase, setOtpPhase] = useState(false);
   const [otpInfo, setOtpInfo] = useState({ email: "", devCode: "" });
+  const { setAuthFromResponse } = useAuth();
 
   const onSubmit = async (e) => {
     e.preventDefault();
@@ -59,9 +61,7 @@ export default function Register() {
       });
       const json = await res.json();
       if(!res.ok) throw new Error(typeof json === "string" ? json : json?.message || "Xác thực thất bại");
-      if (json.accessToken) localStorage.setItem("token", json.accessToken);
-      if (json.email) localStorage.setItem("email", json.email);
-      if (json.roles && json.roles.items) localStorage.setItem("roles", json.roles.items.join(","));
+      setAuthFromResponse(json);
       nav("/courses", { replace: true });
     }catch(err){ setError(err.message || "Xác thực thất bại"); }
     finally{ setSubmitting(false); }

@@ -25,6 +25,8 @@ import QuizResult from "../pages/quiz/QuizResult";
 import Checkout from "../pages/checkout/Checkout";
 import CheckoutSuccess from "../pages/checkout/CheckoutSuccess";
 import CheckoutFailed from "../pages/checkout/CheckoutFailed";
+import AccountSettings from "../pages/account/AccountSettings";
+import RequireAuth from "./RequireAuth";
 
 const router = createBrowserRouter([
   {
@@ -48,6 +50,14 @@ const router = createBrowserRouter([
       { path: "/checkout", element: <Checkout /> },
       { path: "/checkout/success", element: <CheckoutSuccess /> },
       { path: "/checkout/failed", element: <CheckoutFailed /> },
+      {
+        path: "/account/settings",
+        element: (
+          <RequireAuth>
+            <AccountSettings />
+          </RequireAuth>
+        ),
+      },
       {
         path: "/learn/:courseId",
         element: <LearnLayout />,

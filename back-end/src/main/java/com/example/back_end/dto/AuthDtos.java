@@ -16,8 +16,14 @@ public class AuthDtos {
     public static class AuthResponse {
         public String accessToken;
         public String tokenType = "Bearer";
+        public Long userId;
         public String email;
         public String fullName;
+        public String username;
+        public String bio;
+        public String avatarUrl;
+        public boolean twoFactorEnabled;
+        public boolean hasPassword;
         public ListRole roles;
     }
 

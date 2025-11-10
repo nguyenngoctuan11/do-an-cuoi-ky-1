@@ -7,7 +7,7 @@ export default function PathDetail(){
   const [path, setPath] = useState({ items: [] });
   useEffect(()=>{
     fetch(`${API}/api/paths/${id}`).then(r=>r.json()).then(setPath).catch(()=>setPath({items:[]}));
-  }, [id]);
+  }, [API, id]);
   return (
     <div className="max-w-5xl mx-auto p-6">
       <h1 className="text-2xl font-semibold text-stone-900">{path.name || 'Lộ trình'}</h1>

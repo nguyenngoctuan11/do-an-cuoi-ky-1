@@ -6,65 +6,175 @@
   <title>Quản lý khóa học</title>
   <link rel="stylesheet" href="/app/app.css"/>
   <script type="module">
-    import {mountNav, api, setAuth} from './app-common.js';
-    const el = id => document.getElementById(id);
-    async function load(){
-      const list = await api('/api/courses?limit=100');
-      el('rows').innerHTML = list.map(c=>`<tr>
-        <td>${c.id}</td>
-        <td><a href="/app/course.html?id=${c.id}&slug=${encodeURIComponent(c.slug)}">${c.title}</a></td>
-        <td>${c.slug}</td>
-        <td>${c.status||''}</td>
-        <td>${c.createdByEmail||''}</td>
-      </tr>`).join('');
+    import {mountNav, mountAdminMenu, mountAdminUser, api, requireAuth, qs} from './app-common.js';
+
+    const el = (id) => document.getElementById(id);
+    const refs = {
+      rows: () => el('courseRows'),
+      empty: () => el('courseEmpty'),
+      listMsg: () => el('listMsg'),
+      banner: () => el('statusBanner')
+    };
+
+    const formatPrice = (price)=>{
+      if(price === null || price === undefined) return '--';
+      try{
+        return new Intl.NumberFormat('vi-VN').format(price);
+      }catch{
+        return price;
+      }
+    };
+
+    const statusBadge = (status='')=>{
+      const value = status.toLowerCase();
+      const tone = value === 'published' ? 'ok' : (value === 'draft' ? '' : 'warning');
+      const badgeClass = tone === 'ok' ? 'badge ok' : tone === 'warning' ? 'badge' : 'badge';
+      return `<span class="${badgeClass}">${status || '--'}</span>`;
+    };
+
+    const renderRow = (course)=>`
+      <tr>
+        <td>#${course.id}</td>
+        <td>
+          ${course.thumbnailUrl
+            ? `<img class="thumb" src="${course.thumbnailUrl}" alt="${course.title||''}"/>`
+            : '<div class="thumb" style="display:flex;align-items:center;justify-content:center;color:var(--text-muted)">--</div>'}
+        </td>
+        <td>
+          <strong>${course.title || '--'}</strong>
+          <div class="muted">${course.slug || ''}</div>
+        </td>
+        <td>${course.shortDesc || '--'}</td>
+        <td>${course.language || '--'}</td>
+        <td>${course.level || '--'}</td>
+        <td>${statusBadge(course.status)}</td>
+        <td>${formatPrice(course.price)}</td>
+        <td>${course.createdByEmail || '--'}</td>
+        <td>
+          <div class="row">
+            <button class="btn ghost tiny edit-btn" data-id="${course.id}" data-slug="${course.slug||''}">Chỉnh sửa</button>
+            <button class="btn ghost tiny danger delete-btn" data-id="${course.id}">Xóa</button>
+          </div>
+        </td>
+      </tr>
+    `;
+
+    function maybeShowBanner(){
+      const updated = qs('updated');
+      if(updated){
+        refs.banner().hidden = false;
+        refs.banner().textContent = updated === 'created'
+          ? 'Đã tạo khóa học mới.'
+          : 'Đã cập nhật khóa học.';
+        history.replaceState({}, '', location.pathname);
+      }
     }
-    async function create(){
-      const payload = {
-        title: el('title').value.trim(),
-        slug: el('slug').value.trim(),
-        shortDesc: el('short').value.trim(),
-        language: el('lang').value,
-        level: el('level').value,
-        status: el('status').value,
-        price: el('price').value? Number(el('price').value): null
-      };
-      el('msg').textContent = 'Đang tạo...';
-      try{ const res = await api('/api/courses',{method:'POST', body: JSON.stringify(payload)}); el('msg').textContent='OK'; location.href = `/app/course.html?id=${res.id}`; }catch(e){ el('msg').textContent=e.message }
+
+    async function loadCourses(){
+      refs.listMsg().textContent = 'Đang tải danh sách...';
+      try{
+        const list = await api('/api/courses?limit=200');
+        if(list.length){
+          refs.rows().innerHTML = list.map(renderRow).join('');
+          refs.empty().hidden = true;
+          refs.rows().querySelectorAll('.edit-btn').forEach(btn => {
+            btn.onclick = ()=>{
+              const slug = btn.dataset.slug || '';
+              location.href = `/app/course.html?id=${btn.dataset.id}&slug=${encodeURIComponent(slug)}`;
+            };
+          });
+          refs.rows().querySelectorAll('.delete-btn').forEach(btn => {
+            btn.onclick = ()=> removeCourse(Number(btn.dataset.id));
+          });
+        }else{
+          refs.rows().innerHTML = '';
+          refs.empty().hidden = false;
+        }
+        refs.listMsg().textContent = '';
+      }catch(err){
+        refs.listMsg().textContent = err.message || err;
+      }
     }
-    window.addEventListener('DOMContentLoaded', () => {
-      mountNav('nav');
-      load();
-      el('createBtn').onclick = create;
+
+    async function removeCourse(id){
+      if(!confirm(`Xóa khóa học #${id}?`)) return;
+      try{
+        await api(`/api/courses/${id}`, { method:'DELETE' });
+        loadCourses();
+      }catch(err){
+        alert(err.message || err);
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', ()=>{
+      mountNav('nav','sidebar');
+      if(!requireAuth(['MANAGER'])) return;
+      mountAdminMenu('adminMenu','/app/courses.html');
+      mountAdminUser('adminUserCard');
+      maybeShowBanner();
+      loadCourses();
+      el('refreshBtn').onclick = loadCourses;
     });
   </script>
 </head>
 <body>
-  <div id="nav"></div>
-  <div class="container">
-    <div class="card">
-      <h2>Danh sách khóa học</h2>
-      <table>
-        <thead><tr><th>ID</th><th>Tiêu đề</th><th>Slug</th><th>Trạng thái</th><th>Người tạo</th></tr></thead>
-        <tbody id="rows"></tbody>
-      </table>
-    </div>
-    <div class="card">
-      <h3>Tạo khóa học mới</h3>
-      <div class="cols">
-        <input id="title" placeholder="Tiêu đề"/>
-        <input id="slug" placeholder="Slug duy nhất"/>
-        <input id="short" placeholder="Mô tả ngắn"/>
-        <select id="lang"><option value="vi">vi</option><option value="en">en</option></select>
-        <select id="level"><option>beginner</option><option>intermediate</option><option>advanced</option></select>
-        <select id="status"><option>draft</option><option>published</option><option>archived</option></select>
-        <input id="price" placeholder="Giá"/>
+  <div class="admin-shell">
+    <aside class="admin-sidebar">
+      <div id="nav" data-variant="compact"></div>
+      <div class="admin-brand">
+        <span class="eyebrow">Manager</span>
+        <strong>Quản trị nội dung</strong>
       </div>
-      <div class="row">
-        <button id="createBtn">Tạo</button>
-        <span class="muted" id="msg"></span>
+      <div id="adminMenu" class="admin-menu"></div>
+      <div id="adminUserCard" class="admin-user-card"></div>
+    </aside>
+    <main class="admin-main">
+      <div class="admin-page-header">
+        <span class="eyebrow">Khóa học</span>
+        <h1>Danh sách khóa học</h1>
+        <p>Hiển thị đầy đủ thuộc tính (kể cả ảnh), cho phép chỉnh sửa/xóa.</p>
       </div>
-      <div class="muted">Cần đăng nhập với role TEACHER/MANAGER để tạo.</div>
-    </div>
+      <div id="statusBanner" class="status-banner" hidden></div>
+
+      <section class="card">
+        <div class="section-heading">
+          <div>
+            <h2>Danh sách</h2>
+            <p class="muted">Bấm “Chỉnh sửa” để chuyển sang giao diện chỉnh sửa khóa học.</p>
+          </div>
+          <button class="btn ghost" id="refreshBtn">Làm mới</button>
+        </div>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Ảnh</th>
+                <th>Khóa học</th>
+                <th>Mô tả ngắn</th>
+                <th>Ngôn ngữ</th>
+                <th>Level</th>
+                <th>Trạng thái</th>
+                <th>Giá (VND)</th>
+                <th>Người tạo</th>
+                <th>Hành động</th>
+              </tr>
+            </thead>
+            <tbody id="courseRows"></tbody>
+          </table>
+        </div>
+        <div id="courseEmpty" class="table-empty" hidden>Chưa có khóa học nào.</div>
+        <div id="listMsg" class="muted" style="margin-top:12px;"></div>
+      </section>
+
+      <section class="card">
+        <h2>Tạo khóa học</h2>
+        <p class="muted">Chức năng tạo mới được gom về một trang duy nhất.</p>
+        <div class="row">
+          <a class="btn" href="/app/admin/teacher-new-course.html">Đi tới trang tạo khóa học</a>
+        </div>
+      </section>
+    </main>
   </div>
 </body>
 </html>

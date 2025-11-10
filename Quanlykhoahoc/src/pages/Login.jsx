@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 export default function Login() {
   const [showPass, setShowPass] = useState(false);
@@ -8,6 +9,7 @@ export default function Login() {
   const location = useLocation();
   const navigate = useNavigate();
   const emailRef = useRef(null);
+  const { login } = useAuth();
 
   useEffect(() => {
     if (location.state?.emailHint && emailRef.current) {
@@ -19,23 +21,14 @@ export default function Login() {
     e.preventDefault();
     setError("");
     const data = Object.fromEntries(new FormData(e.currentTarget));
-    const API = process.env.REACT_APP_API_BASE || "http://localhost:8081";
     try {
       setSubmitting(true);
-      const res = await fetch(`${API}/api/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: data.email, password: data.password }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(typeof json === "string" ? json : json?.message || "Đăng nhập thất bại");
-      if (json.accessToken) localStorage.setItem("token", json.accessToken);
-      if (json.email) localStorage.setItem("email", json.email);
-      if (json.roles && json.roles.items) localStorage.setItem("roles", json.roles.items.join(","));
+      await login({ email: data.email, password: data.password });
       const redirectTo = location.state?.from || "/courses";
       navigate(redirectTo, { replace: true });
     } catch (err) {
-      setError(err.message || "Đăng nhập thất bại");
+      const apiMsg = err?.response?.data;
+      setError(typeof apiMsg === "string" ? apiMsg : err?.message || "Đăng nhập thất bại");
     } finally {
       setSubmitting(false);
     }
@@ -112,7 +105,13 @@ export default function Login() {
               <input type="checkbox" name="remember" className="h-4 w-4 rounded border-[#eadfd1] text-[#caa877] focus:ring-[#d9b991]" />
               Remember me
             </label>
-            <a className="text-[#a07f63] hover:underline" href="#">Forgot password?</a>
+            <button
+              type="button"
+              className="text-[#a07f63] hover:underline"
+              onClick={() => window.alert("Tính năng đang được phát triển.")}
+            >
+              Forgot password?
+            </button>
           </div>
 
           <button type="submit" disabled={submitting} className={`w-full rounded-2xl bg-[#caa877] hover:bg-[#c39f6f] text-white py-3 font-medium shadow-md transition-colors ${submitting ? "opacity-70 cursor-not-allowed" : ""}`}>

@@ -27,6 +27,15 @@ public class User {
     @Column(name = "locale", length = 16)
     private String locale;
 
+    @Column(name = "username", length = 64, unique = true)
+    private String username;
+
+    @Column(name = "bio", length = 2000)
+    private String bio;
+
+    @Column(name = "two_factor_enabled", nullable = false)
+    private boolean twoFactorEnabled = false;
+
     @Column(name = "status", length = 16, nullable = false)
     private String status;
 
@@ -62,6 +71,15 @@ public class User {
 
     public String getLocale() { return locale; }
     public void setLocale(String locale) { this.locale = locale; }
+
+    public String getUsername() { return username; }
+    public void setUsername(String username) { this.username = username; }
+
+    public String getBio() { return bio; }
+    public void setBio(String bio) { this.bio = bio; }
+
+    public boolean isTwoFactorEnabled() { return twoFactorEnabled; }
+    public void setTwoFactorEnabled(boolean twoFactorEnabled) { this.twoFactorEnabled = twoFactorEnabled; }
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }

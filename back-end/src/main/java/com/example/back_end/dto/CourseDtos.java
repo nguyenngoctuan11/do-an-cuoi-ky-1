@@ -11,18 +11,10 @@ public class CourseDtos {
         public String level;    // beginner,intermediate,advanced
         public String status;   // draft,published,archived
         public BigDecimal price;
-    }
-
-    public static class UpdateRequest {
-        public String title;
-        public String slug;
-        public String shortDesc;
-        public String language; // vi,en
-        public String level;    // beginner,intermediate,advanced
-        public String status;   // draft,published,archived
-        public java.math.BigDecimal price;
         public String thumbnailUrl; // optional direct set
     }
+
+    public static class UpdateRequest extends CreateRequest { }
 
     public static class CourseResponse {
         public Long id;

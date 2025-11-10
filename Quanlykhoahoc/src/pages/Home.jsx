@@ -116,46 +116,6 @@ function Features() {
   );
 }
 
-function Courses() {
-  const courses = Array.from({ length: 6 }).map((_, i) => ({
-    id: i + 1,
-    title: `Khoá học Fullstack #${i + 1}`,
-    level: i % 2 ? "Trung cấp" : "Cơ bản",
-    time: `${8 + i} tuần`,
-  }));
-  return (
-    <section id="courses" className="bg-stone-50">
-      <div className="max-w-7xl mx-auto px-4 py-16">
-        <SectionHeading
-          eyebrow="Khoá học nổi bật"
-          title="Lộ trình thực chiến cho mọi cấp độ"
-          subtitle="Học theo dự án, cập nhật công nghệ mới, mentor sát sao."
-          center
-        />
-        <div className="mt-10 grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {courses.map((c) => (
-            <div key={c.id} className="group rounded-2xl overflow-hidden border border-stone-200 bg-white hover:shadow-md transition">
-              <div className="aspect-video bg-gradient-to-br from-primary-200 to-primary-100" />
-              <div className="p-4">
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="px-2 py-0.5 rounded-full bg-primary-50 text-primary-700 border border-primary-200">{c.level}</span>
-                  <span className="text-stone-500">•</span>
-                  <span className="text-stone-600">{c.time}</span>
-                </div>
-                <h3 className="mt-2 font-semibold text-stone-900 group-hover:text-primary-700">{c.title}</h3>
-                <div className="mt-4 flex items-center justify-between">
-                  <div className="text-sm text-stone-600">120 bài học</div>
-                  <button className="btn btn-primary">Xem chi tiết</button>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
 function Testimonials() {
   const items = [
     {
@@ -215,48 +175,6 @@ function CtaBanner() {
         </div>
       </div>
     </section>
-  );
-}
-
-function Footer() {
-  return (
-    <footer className="border-t border-stone-200 bg-white">
-      <div className="max-w-7xl mx-auto px-4 py-10 grid md:grid-cols-4 gap-8 text-sm">
-        <div>
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-md bg-primary-600 text-white grid place-items-center font-bold">FS</div>
-            <span className="font-semibold text-stone-900">Your LMS</span>
-          </div>
-          <p className="mt-3 text-stone-600">Hệ thống học lập trình định hướng thực chiến.</p>
-        </div>
-        <div>
-          <div className="font-semibold text-stone-900">Sản phẩm</div>
-          <ul className="mt-3 space-y-2 text-stone-600">
-            <li><a href="#courses">Khoá học</a></li>
-            <li><a href="#features">Tính năng</a></li>
-            <li><a href="#testimonials">Đánh giá</a></li>
-          </ul>
-        </div>
-        <div>
-          <div className="font-semibold text-stone-900">Tài nguyên</div>
-          <ul className="mt-3 space-y-2 text-stone-600">
-            <li><a href="#blog">Blog</a></li>
-            <li><a href="#">Hướng dẫn</a></li>
-            <li><a href="#">FAQ</a></li>
-          </ul>
-        </div>
-        <div>
-          <div className="font-semibold text-stone-900">Liên hệ</div>
-          <ul className="mt-3 space-y-2 text-stone-600">
-            <li>support@example.com</li>
-            <li>0123 456 789</li>
-          </ul>
-        </div>
-      </div>
-      <div className="border-t border-stone-200 py-4 text-center text-xs text-stone-500">
-        © {new Date().getFullYear()} Your LMS. All rights reserved.
-      </div>
-    </footer>
   );
 }
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 
 function ActionButton({ onClick, children }) {
   return (
@@ -19,16 +19,16 @@ export default function MyCourses() {
     return token ? { Authorization: `Bearer ${token}` } : {};
   };
 
-  const load = () => {
+  const load = useCallback(() => {
     setLoading(true); setErr(null);
     fetch(`${API}/api/teacher/courses/my`, { headers: { "Content-Type": "application/json", ...authHeaders() } })
       .then((r) => r.json())
       .then((data) => setItems(Array.isArray(data) ? data : []))
       .catch((e) => setErr(e?.message || String(e)))
       .finally(() => setLoading(false));
-  };
+  }, [API]);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [load]);
 
   const submitReview = async (id) => {
     await fetch(`${API}/api/teacher/courses/${id}/submit`, { method: "POST", headers: { "Content-Type": "application/json", ...authHeaders() } });
