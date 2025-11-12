@@ -17,6 +17,9 @@ public class PublicCourseDetailController {
     @GetMapping("/{slug}/detail-sql")
     public ResponseEntity<?> detail(@PathVariable String slug) {
         PublicCourseDetailDto dto = queryService.loadCourseDetailBySlug(slug);
+        if (dto == null && slug.matches("\\d+")) {
+            dto = queryService.loadCourseDetailById(Long.parseLong(slug), false);
+        }
         if (dto == null) return ResponseEntity.notFound().build();
         return ResponseEntity.ok(dto);
     }

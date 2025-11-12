@@ -18,7 +18,7 @@ public class PublicCourseQueryService {
     public PublicCourseDetailDto loadCourseDetailBySlug(String slug) {
         @SuppressWarnings("unchecked")
         List<Object[]> rows = (List<Object[]>) em.createNativeQuery(
-                "SELECT id, title, slug, level, status, price, thumbnail_url FROM dbo.courses WHERE slug = :slug")
+                "SELECT id, title, slug, level, status, price, is_free, thumbnail_url FROM dbo.courses WHERE slug = :slug")
                 .setParameter("slug", slug)
                 .getResultList();
         if (rows.isEmpty()) return null;
@@ -30,7 +30,8 @@ public class PublicCourseQueryService {
         dto.level = str(c[3]);
         dto.status = str(c[4]);
         dto.price = (c[5] instanceof BigDecimal) ? (BigDecimal) c[5] : null;
-        dto.thumbnail_url = str(c[6]);
+        dto.is_free = bool(c[6]);
+        dto.thumbnail_url = str(c[7]);
 
         @SuppressWarnings("unchecked")
         List<Object[]> modules = (List<Object[]>) em.createNativeQuery(
@@ -70,7 +71,7 @@ public class PublicCourseQueryService {
     public PublicCourseDetailDto loadCourseDetailById(Long courseId, boolean includeCreator) {
         @SuppressWarnings("unchecked")
         List<Object[]> rows = (List<Object[]>) em.createNativeQuery(
-                "SELECT c.id, c.title, c.slug, c.level, c.status, c.price, c.thumbnail_url" +
+                "SELECT c.id, c.title, c.slug, c.level, c.status, c.price, c.is_free, c.thumbnail_url" +
                         (includeCreator ? ", u.email, u.full_name" : "") +
                         " FROM dbo.courses c" +
                         (includeCreator ? " JOIN dbo.users u ON u.id = c.created_by" : "") +
@@ -86,10 +87,11 @@ public class PublicCourseQueryService {
         dto.level = str(c[3]);
         dto.status = str(c[4]);
         dto.price = (c[5] instanceof java.math.BigDecimal) ? (java.math.BigDecimal) c[5] : null;
-        dto.thumbnail_url = str(c[6]);
+        dto.is_free = bool(c[6]);
+        dto.thumbnail_url = str(c[7]);
         if (includeCreator) {
-            dto.created_by_email = str(c[7]);
-            dto.created_by_name = str(c[8]);
+            dto.created_by_email = str(c[8]);
+            dto.created_by_name = str(c[9]);
         }
 
         @SuppressWarnings("unchecked")
@@ -129,4 +131,10 @@ public class PublicCourseQueryService {
     private static Long toLong(Object o){ return o==null?null: ((Number)o).longValue(); }
     private static Integer toInt(Object o){ return o==null?null: ((Number)o).intValue(); }
     private static String str(Object o){ return o==null?null:o.toString(); }
+    private static Boolean bool(Object o){
+        if(o == null) return null;
+        if(o instanceof Boolean) return (Boolean) o;
+        if(o instanceof Number) return ((Number) o).intValue() != 0;
+        return Boolean.valueOf(o.toString());
+    }
 }

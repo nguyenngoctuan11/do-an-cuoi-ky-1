@@ -19,6 +19,24 @@
       thumbPlaceholder: () => el('thumbPlaceholder')
     };
 
+    function priceState(){
+      const priceInput = el('price');
+      if(!priceInput) return { value: null, isFree: true };
+      const raw = (priceInput.value || '').trim();
+      if(!raw) return { value: null, isFree: true };
+      const parsed = Number(raw);
+      return { value: Number.isFinite(parsed) ? parsed : null, isFree: false };
+    }
+
+    function updatePriceHint(){
+      const hint = document.getElementById('priceHint');
+      if(!hint) return;
+      const state = priceState();
+      hint.textContent = state.isFree
+        ? 'Không nhập giá ⇒ khóa miễn phí'
+        : 'Đã nhập giá ⇒ khóa Pro';
+    }
+
     function formatDate(value){
       if(!value) return '--';
       try{ return new Date(value).toLocaleString('vi-VN'); }catch{ return value; }
@@ -42,6 +60,7 @@
           <small class="muted">Phê duyệt: ${course.approvalStatus || '--'}</small>
         `;
         updateThumbnailPreview(course.thumbnailUrl);
+        updatePriceHint();
         refs.formMsg().textContent = '';
       }catch(err){
         refs.formMsg().textContent = err.message || err;
@@ -49,6 +68,7 @@
     }
 
     function collectForm(){
+      const pricing = priceState();
       return {
         title: el('title').value.trim(),
         slug: el('slug').value.trim(),
@@ -56,7 +76,8 @@
         language: el('language').value,
         level: el('level').value,
         status: el('status').value,
-        price: el('price').value ? Number(el('price').value) : null,
+        price: pricing.value,
+        isFree: pricing.isFree,
         thumbnailUrl: el('thumbnailUrl').value.trim()
       };
     }
@@ -227,6 +248,7 @@
       document.getElementById('addModuleBtn').addEventListener('click', addModule);
       document.getElementById('thumbUploadBtn').addEventListener('click', uploadThumbnail);
       el('thumbnailUrl').addEventListener('input', (e)=> updateThumbnailPreview(e.target.value.trim()));
+      el('price').addEventListener('input', updatePriceHint);
       loadCourse();
       loadModules();
     });
@@ -282,7 +304,11 @@
               <option value="archived">archived</option>
             </select>
           </label>
-          <label class="field"><span>Giá (VND)</span><input id="price" type="number" min="0" step="10000"/></label>
+          <label class="field">
+            <span>Giá (VND)</span>
+            <input id="price" type="number" min="0" step="10000"/>
+            <small id="priceHint" class="muted"></small>
+          </label>
           <label class="field" style="grid-column:span 2;">
             <span>Mô tả ngắn</span>
             <textarea id="shortDesc" placeholder="Tối đa ~160 ký tự"></textarea>

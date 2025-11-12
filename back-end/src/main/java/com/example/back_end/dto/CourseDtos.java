@@ -11,6 +11,7 @@ public class CourseDtos {
         public String level;    // beginner,intermediate,advanced
         public String status;   // draft,published,archived
         public BigDecimal price;
+        public Boolean isFree;
         public String thumbnailUrl; // optional direct set
     }
 
@@ -25,6 +26,7 @@ public class CourseDtos {
         public String level;
         public String status;
         public BigDecimal price;
+        public Boolean isFree;
         public Long createdById;
         public String createdByEmail;
         public String thumbnailUrl;

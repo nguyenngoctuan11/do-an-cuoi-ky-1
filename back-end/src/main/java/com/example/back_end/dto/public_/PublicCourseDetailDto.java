@@ -12,6 +12,7 @@ public class PublicCourseDetailDto {
     public String level;
     public String status;
     public BigDecimal price;
+    public Boolean is_free;
     public String thumbnail_url;
     public String created_by_email;
     public String created_by_name;

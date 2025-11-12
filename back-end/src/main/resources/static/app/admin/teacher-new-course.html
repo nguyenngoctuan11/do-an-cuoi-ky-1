@@ -9,6 +9,27 @@
     import {mountNav, mountAdminMenu, mountAdminUser, api, token, requireAuth, qs} from '/app/app-common.js';
     const el = id => document.getElementById(id);
 
+    function collectPriceState(){
+      const input = el('price');
+      if(!input) return { price: null, isFree: true };
+      const raw = (input.value || '').trim();
+      if(!raw) return { price: null, isFree: true };
+      const parsed = Number(raw);
+      return { price: Number.isFinite(parsed) ? parsed : null, isFree: false };
+    }
+
+    function updateCreatePriceHint(){
+      const hint = document.getElementById('createPriceHint');
+      if(!hint) return;
+      const state = collectPriceState();
+      hint.textContent = state.isFree
+        ? 'Không nhập giá ⇒ khóa miễn phí'
+        : 'Đã nhập giá ⇒ khóa Pro';
+    }
+
+    window.__teacherCollectPrice = collectPriceState;
+    window.__teacherUpdatePriceHint = updateCreatePriceHint;
+
     async function loadModules(courseId){
       const box = el('editorBody'); if(!box) return;
       const list = await api(`/api/courses/${courseId}/modules`);
@@ -101,6 +122,7 @@
         if(!requireAuth(['TEACHER','MANAGER'])) return;
         el('createBtn').disabled = true;
         el('msg').textContent = 'Đang tạo...';
+        const pricing = collectPriceState();
         const body = {
           title: el('title').value.trim(),
           slug: el('slug').value.trim(),
@@ -108,7 +130,8 @@
           language: el('lang').value,
           level: el('level').value,
           status: 'draft',
-          price: el('price').value ? Number(el('price').value) : null
+          price: pricing.price,
+          isFree: pricing.isFree
         };
         const course = await api('/api/teacher/courses', { method:'POST', body: JSON.stringify(body) });
         el('msg').textContent = `Đã tạo ID=${course.id}`;
@@ -141,6 +164,12 @@
       mountAdminMenu('adminMenu','teacher-new-course');
       mountAdminUser('adminUserCard');
       el('createBtn').addEventListener('click', create);
+      const priceInput = el('price');
+      if(priceInput){
+        priceInput.addEventListener('input', updateCreatePriceHint);
+        updateCreatePriceHint();
+      }
+
       const cid = Number(qs('id'));
       if(cid){
         showEditor(cid);
@@ -185,7 +214,11 @@
               <option value="intermediate">intermediate</option>
               <option value="advanced">advanced</option>
             </select>
-            <input id="price" placeholder="Giá"/>
+            <div class="field">
+              <span>Gi?</span>
+              <input id="price" placeholder="Gi?"/>
+              <small id="createPriceHint" class="muted"></small>
+            </div>
             <div>
               <label>Thumbnail: <input type="file" id="thumb" accept="image/*"/></label>
             </div>
@@ -260,6 +293,7 @@
           if(el('lang')) el('lang').value = d.language||'vi';
           if(el('level')) el('level').value = d.level||'beginner';
           if(el('price')) el('price').value = d.price!=null? d.price: '';
+          if(window.__teacherUpdatePriceHint){ window.__teacherUpdatePriceHint(); }
           if(d.thumbnailUrl){
             let pv = document.getElementById('thumbPreview');
             if(!pv){
@@ -278,13 +312,15 @@
           if(msg) msg.textContent = 'Không thể tải thông tin khóa học: ' + (e && e.message ? e.message : e);
         }
         if(ub) ub.onclick = async function(){
+          const priceData = window.__teacherCollectPrice ? window.__teacherCollectPrice() : { price: null, isFree: true };
           const body = {
             title: el('title')?.value?.trim(),
             slug: el('slug')?.value?.trim(),
             shortDesc: el('short')?.value?.trim(),
             language: el('lang')?.value,
             level: el('level')?.value,
-            price: el('price')?.value ? Number(el('price').value) : null
+            price: priceData.price,
+            isFree: priceData.isFree
           };
           try{
             await api(`/api/teacher/courses/${cid}`, { method:'PATCH', body: JSON.stringify(body) });

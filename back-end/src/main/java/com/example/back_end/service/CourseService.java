@@ -11,6 +11,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Locale;
 import java.util.stream.Collectors;
@@ -79,6 +80,7 @@ public class CourseService {
         dto.level = course.getLevel();
         dto.status = course.getStatus();
         dto.price = course.getPrice();
+        dto.isFree = course.getIsFree();
         dto.thumbnailUrl = course.getThumbnailUrl();
         dto.approvalStatus = course.getApprovalStatus();
         dto.createdById = course.getCreatedBy() != null ? course.getCreatedBy().getId() : null;
@@ -123,14 +125,46 @@ public class CourseService {
             course.setStatus(status != null ? status.toLowerCase(Locale.ROOT) : "draft");
         }
 
-        if (req.price != null || creating) {
-            course.setPrice(req.price);
+        if (req.price != null || req.isFree != null || creating) {
+            applyPricing(course, req, creating);
         }
 
         if (req.thumbnailUrl != null || creating) {
             String thumbnail = trimToNull(req.thumbnailUrl);
             course.setThumbnailUrl(thumbnail);
         }
+    }
+
+    private void applyPricing(Course course, CourseDtos.CreateRequest req, boolean creating) {
+        boolean priceProvided = req.price != null;
+        BigDecimal normalizedPrice = priceProvided ? normalizePrice(req.price) : course.getPrice();
+        boolean isFreeFlag;
+        if (req.isFree != null) {
+            isFreeFlag = req.isFree;
+        } else if (priceProvided) {
+            isFreeFlag = normalizedPrice == null;
+        } else if (creating) {
+            isFreeFlag = true;
+        } else {
+            Boolean current = course.getIsFree();
+            isFreeFlag = current != null ? current : (course.getPrice() == null);
+        }
+
+        if (isFreeFlag) {
+            course.setIsFree(true);
+            course.setPrice(null);
+        } else {
+            if (normalizedPrice == null) {
+                throw new IllegalArgumentException("Vui lòng nhập giá lớn hơn 0 cho khóa học Pro");
+            }
+            course.setIsFree(false);
+            course.setPrice(normalizedPrice);
+        }
+    }
+
+    private BigDecimal normalizePrice(BigDecimal price) {
+        if (price == null) return null;
+        return price.compareTo(BigDecimal.ZERO) > 0 ? price : null;
     }
 
     private String trimToNull(String value){

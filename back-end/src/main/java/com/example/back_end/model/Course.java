@@ -33,6 +33,9 @@ public class Course {
     @Column(precision = 12, scale = 2)
     private BigDecimal price;
 
+    @Column(name = "is_free")
+    private Boolean isFree;
+
     @Column(name = "thumbnail_url", length = 512)
     private String thumbnailUrl;
 
@@ -80,6 +83,8 @@ public class Course {
     public void setStatus(String status) { this.status = status; }
     public BigDecimal getPrice() { return price; }
     public void setPrice(BigDecimal price) { this.price = price; }
+    public Boolean getIsFree() { return isFree; }
+    public void setIsFree(Boolean isFree) { this.isFree = isFree; }
     public User getCreatedBy() { return createdBy; }
     public void setCreatedBy(User createdBy) { this.createdBy = createdBy; }
     public String getThumbnailUrl() { return thumbnailUrl; }

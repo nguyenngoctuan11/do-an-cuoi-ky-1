@@ -1,95 +1,112 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import SectionHeading from "../components/SectionHeading";
+import CourseShowcaseCard from "../components/CourseShowcaseCard";
+import { resolveIsFree } from "../utils/price";
 
-function CourseCard({ id, slug, title, level, lessons, image, price, onEnroll }) {
-  return (
-    <div className="group rounded-2xl overflow-hidden border border-stone-200 bg-white hover:shadow-md transition block">
-      <a href={`/learn/${slug || id}?from=courses`}>
-        {image ? (
-          <img src={image} alt={title} className="aspect-video w-full object-cover" />
-        ) : (
-          <div className="aspect-video bg-gradient-to-br from-primary-200 to-primary-100" />
-        )}
-      </a>
-      <div className="p-4">
-        <div className="flex items-center gap-2 text-xs">
-          {level && (
-            <span className="px-2 py-0.5 rounded-full bg-primary-50 text-primary-700 border border-primary-200">{level}</span>
-          )}
-          <span className="ml-auto text-sm font-medium text-stone-900">{price != null ? `${price} đ` : 'Miễn phí'}</span>
-        </div>
-        <h3 className="mt-2 font-semibold text-stone-900 group-hover:text-primary-700">{title}</h3>
-        <div className="mt-4 flex items-center justify-between">
-          <div className="text-sm text-stone-600">{lessons} bài học</div>
-          <div className="flex items-center gap-2">
-            <a href={`/learn/${slug || id}?from=courses`} className="btn btn-primary">Xem chi tiết</a>
-            <button className="btn" onClick={onEnroll}>Đăng ký</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+const API_BASE = process.env.REACT_APP_API_BASE || "http://localhost:8081";
+
+function resolveThumb(u) {
+  if (!u) return null;
+  let s = String(u).trim().replace(/\\/g, "/");
+  if (/^https?:\/\//i.test(s) || s.startsWith("data:")) return s;
+  if (!s.startsWith("/")) s = `/${s}`;
+  return `${API_BASE}${s}`;
+}
+
+function formatDurationFromMinutes(minutes) {
+  if (minutes == null) return null;
+  const totalMinutes = Number(minutes);
+  if (!Number.isFinite(totalMinutes) || totalMinutes <= 0) return null;
+  const hours = Math.floor(totalMinutes / 60);
+  const mins = Math.round(totalMinutes % 60);
+  if (hours === 0) return `${mins} phút`;
+  if (mins === 0) return `${hours} giờ`;
+  return `${hours}h${String(mins).padStart(2, "0")}p`;
 }
 
 export default function Courses() {
   const [courses, setCourses] = useState([]);
+  const [loading, setLoading] = useState(true);
+
   useEffect(() => {
-    const API = process.env.REACT_APP_API_BASE || "http://localhost:8081";
-    const asset = (u) => (u && u.startsWith("/")) ? `${API}${u}` : u;
-    fetch(`${API}/api/public/courses-sql?status=published&limit=12`)
-      .then((r) => r.json())
-      .then((data) => {
+    async function load() {
+      setLoading(true);
+      try {
+        const res = await fetch(`${API_BASE}/api/public/courses-sql?status=published&limit=12`, {
+          headers: { Accept: "application/json" },
+        });
+        if (!res.ok) throw new Error("Không thể tải danh sách khóa học");
+        const data = await res.json();
         if (Array.isArray(data)) {
-          // map thumbnail to absolute URL when needed
-          setCourses(data.map((c) => ({ ...c, thumbnail_url: asset(c.thumbnail_url) })));
+          const normalized = data.map((c) => ({
+            id: c.id,
+            slug: c.slug,
+            title: c.title,
+            level: c.level,
+            lessons: c.lessons_count ?? c.lessonsCount ?? 0,
+            thumbnail: resolveThumb(
+              c.thumbnail_url ?? c.thumbnailUrl ?? c.thumbnail_path ?? c.thumbnailPath ?? null
+            ),
+            price: c.price ?? null,
+            isFree: resolveIsFree(c.price, c.is_free ?? c.isFree),
+            durationLabel: formatDurationFromMinutes(
+              c.total_minutes ?? c.totalMinutes ?? c.duration_minutes ?? c.durationMinutes ?? null
+            ),
+          }));
+          setCourses(normalized);
+        } else {
+          setCourses([]);
         }
-        else setCourses([]);
-      })
-      .catch((e) => {
-        console.error("Load courses failed", e);
+      } catch (error) {
+        console.error(error);
         setCourses([]);
-      });
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
   }, []);
-  const enroll = async (courseId) => {
-    const token = localStorage.getItem('token');
-    if(!token){ window.location.href = '/login'; return; }
-    const API = process.env.REACT_APP_API_BASE || "http://localhost:8081";
-    try{
-      const r = await fetch(`${API}/api/courses/${courseId}/enroll`, { method:'POST', headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${token}` } });
-      const t = await r.text(); let d; try{ d=t? JSON.parse(t): null;}catch{ d=null; }
-      if(!r.ok){ alert((d&&d.message)||r.statusText); return; }
-      alert('Đăng ký thành công');
-    }catch(e){ alert('Lỗi đăng ký: ' + (e.message||e)); }
-  };
+
   return (
-    <div className="bg-white">
-      <div className="max-w-7xl mx-auto px-4 py-12">
+    <section className="bg-white">
+      <div className="mx-auto max-w-7xl px-4 py-16">
         <SectionHeading
-          eyebrow="Khoá học"
+          eyebrow="Khóa học"
           title="Danh sách khóa học"
           subtitle="Chọn lộ trình phù hợp với mục tiêu của bạn"
           center
         />
-        <div className="mt-10 grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {courses.map((c) => (
-            <CourseCard
-              key={c.id}
-              id={c.id}
-              slug={c.slug}
-              title={c.title}
-              level={c.level}
-              lessons={c.lessons_count ?? 0}
-              image={c.thumbnail_url}
-              price={c.price}
-              onEnroll={() => enroll(c.id)}
-            />
-          ))}
-          {courses.length === 0 && (
-            <div className="col-span-full text-center text-stone-500">Chưa có khóa học.</div>
-          )}
-        </div>
+
+        {loading ? (
+          <div className="mt-12 grid animate-pulse gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, idx) => (
+              <div key={idx} className="h-72 rounded-3xl border border-stone-200 bg-stone-50" />
+            ))}
+          </div>
+        ) : (
+          <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {courses.length === 0 && (
+              <div className="col-span-full rounded-2xl border border-dashed border-stone-200 bg-stone-50/70 px-6 py-12 text-center text-stone-600">
+                Chưa có khóa học. Hãy quay lại sau nhé!
+              </div>
+            )}
+            {courses.map((course) => (
+              <CourseShowcaseCard
+                key={course.id}
+                id={course.id}
+                slug={course.slug}
+                title={course.title}
+                level={course.level}
+                lessonsCount={course.lessons}
+                thumbnail={course.thumbnail}
+                price={course.price}
+                isFree={course.isFree}
+                durationLabel={course.durationLabel}
+              />
+            ))}
+          </div>
+        )}
       </div>
-    </div>
+    </section>
   );
 }
-

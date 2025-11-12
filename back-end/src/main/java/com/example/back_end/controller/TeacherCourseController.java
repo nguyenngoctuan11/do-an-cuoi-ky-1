@@ -11,6 +11,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Map;
 
@@ -41,7 +42,7 @@ public class TeacherCourseController {
             c.setLanguage(req.language != null ? req.language : "vi");
             c.setLevel(req.level != null ? req.level : "beginner");
             c.setStatus("draft");
-            c.setPrice(req.price);
+            applyPricing(c, req, true);
             c.setThumbnailUrl(null);
             c.setCreatedBy(creator);
             c.setApprovalStatus("draft");
@@ -85,6 +86,7 @@ public class TeacherCourseController {
         CourseDtos.CourseResponse res = new CourseDtos.CourseResponse();
         res.id = c.getId(); res.title = c.getTitle(); res.slug = c.getSlug(); res.shortDesc = c.getShortDesc();
         res.language = c.getLanguage(); res.level = c.getLevel(); res.status = c.getStatus(); res.price = c.getPrice();
+        res.isFree = c.getIsFree();
         res.createdById = c.getCreatedBy().getId(); res.createdByEmail = c.getCreatedBy().getEmail();
         res.thumbnailUrl = c.getThumbnailUrl(); res.approvalStatus = c.getApprovalStatus();
         return ResponseEntity.ok(res);
@@ -116,7 +118,7 @@ public class TeacherCourseController {
         if (req.language != null) c.setLanguage(req.language);
         if (req.level != null) c.setLevel(req.level);
         if (req.status != null) c.setStatus(req.status);
-        if (req.price != null) c.setPrice(req.price);
+        if (req.price != null || req.isFree != null) applyPricing(c, req, false);
         if (req.thumbnailUrl != null) c.setThumbnailUrl(req.thumbnailUrl);
         try {
             courseRepository.save(c);
@@ -128,6 +130,38 @@ public class TeacherCourseController {
             }
             return ResponseEntity.badRequest().body("Dữ liệu không hợp lệ: " + msg);
         }
+    }
+
+    private void applyPricing(Course course, CourseDtos.CreateRequest req, boolean creating) {
+        boolean priceProvided = req.price != null;
+        BigDecimal normalizedPrice = priceProvided ? normalizePrice(req.price) : course.getPrice();
+        boolean isFreeFlag;
+        if (req.isFree != null) {
+            isFreeFlag = req.isFree;
+        } else if (priceProvided) {
+            isFreeFlag = normalizedPrice == null;
+        } else if (creating) {
+            isFreeFlag = true;
+        } else {
+            Boolean current = course.getIsFree();
+            isFreeFlag = current != null ? current : (course.getPrice() == null);
+        }
+
+        if (isFreeFlag) {
+            course.setIsFree(true);
+            course.setPrice(null);
+        } else {
+            if (normalizedPrice == null) {
+                throw new IllegalArgumentException("Vui lòng nhập giá lớn hơn 0 cho khóa Pro");
+            }
+            course.setIsFree(false);
+            course.setPrice(normalizedPrice);
+        }
+    }
+
+    private BigDecimal normalizePrice(BigDecimal price) {
+        if (price == null) return null;
+        return price.compareTo(BigDecimal.ZERO) > 0 ? price : null;
     }
 
     @DeleteMapping("/{id}")

@@ -27,7 +27,7 @@ public interface CourseRepository extends JpaRepository<Course, Long> {
 
     @Query(value = "\n" +
             "SELECT\n" +
-            "  c.id, c.title, c.slug, c.level, c.status, c.price, c.thumbnail_url AS thumbnailUrl,\n" +
+            "  c.id, c.title, c.slug, c.level, c.status, c.price, c.is_free AS isFree, c.thumbnail_url AS thumbnailUrl,\n" +
             "  (SELECT COUNT(*)\n" +
             "     FROM dbo.lessons l JOIN dbo.modules m ON l.module_id = m.id\n" +
             "    WHERE m.course_id = c.id) AS lessonsCount,\n" +
@@ -48,7 +48,7 @@ public interface CourseRepository extends JpaRepository<Course, Long> {
     // Phiên bản trả tên cột đúng T-SQL (snake_case)
     @Query(value = "\n" +
             "SELECT\n" +
-            "  c.id, c.title, c.slug, c.level, c.status, c.price, c.thumbnail_url,\n" +
+            "  c.id, c.title, c.slug, c.level, c.status, c.price, c.is_free, c.thumbnail_url,\n" +
             "  (SELECT COUNT(*)\n" +
             "     FROM dbo.lessons l JOIN dbo.modules m ON l.module_id = m.id\n" +
             "    WHERE m.course_id = c.id) AS lessons_count,\n" +

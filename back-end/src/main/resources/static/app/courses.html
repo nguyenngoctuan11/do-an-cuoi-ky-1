@@ -24,6 +24,14 @@
         return price;
       }
     };
+    const renderPriceCell = (course)=>{
+      const flag = (course?.isFree ?? course?.is_free ?? false) || course?.price == null;
+      if(flag){
+        return '<div class="badge ok">Miễn phí</div>';
+      }
+      const money = formatPrice(course.price);
+      return `<div class="price-cell"><span class="badge">Pro</span><strong>${money} đ</strong></div>`;
+    };
 
     const statusBadge = (status='')=>{
       const value = status.toLowerCase();
@@ -48,7 +56,7 @@
         <td>${course.language || '--'}</td>
         <td>${course.level || '--'}</td>
         <td>${statusBadge(course.status)}</td>
-        <td>${formatPrice(course.price)}</td>
+        <td>${renderPriceCell(course)}</td>
         <td>${course.createdByEmail || '--'}</td>
         <td>
           <div class="row">
@@ -155,7 +163,7 @@
                 <th>Ngôn ngữ</th>
                 <th>Level</th>
                 <th>Trạng thái</th>
-                <th>Giá (VND)</th>
+                <th>Loai/Gia</th>
                 <th>Người tạo</th>
                 <th>Hành động</th>
               </tr>
