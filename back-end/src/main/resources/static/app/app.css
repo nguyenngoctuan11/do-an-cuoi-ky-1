@@ -114,6 +114,98 @@ img{max-width:100%}
   margin-top:0;
   margin-bottom:12px;
 }
+.quiz-layout{display:grid;gap:24px}
+@media (min-width:1024px){
+  .quiz-layout{grid-template-columns:1.1fr .9fr}
+}
+.quiz-column{display:flex;flex-direction:column;gap:20px}
+.quiz-card textarea{min-height:130px}
+.card-heading{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:16px;
+  margin-bottom:12px;
+}
+.table-scroll{overflow:auto;margin-top:12px}
+.table-title{font-weight:600}
+.table-sub{font-size:.85rem;color:var(--text-muted)}
+.table-actions{display:flex;gap:8px;flex-wrap:wrap}
+.select-row{margin-bottom:8px}
+.select-row select{flex:1;min-width:220px}
+.status-hint{min-height:20px;margin-top:12px}
+.form-actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:16px}
+.toggle{display:flex;align-items:center;gap:8px}
+.media-row{margin-top:12px;gap:12px;flex-wrap:wrap}
+.media-actions{flex:1;gap:8px;flex-wrap:wrap}
+.option-grid{display:grid;gap:12px;margin-top:16px}
+.option-check{display:flex;align-items:center;gap:6px;font-size:.9rem}
+.question-list{margin-top:12px;display:grid;gap:16px}
+.question-empty{
+  padding:24px;
+  border:1px dashed rgba(255,255,255,.18);
+  border-radius:14px;
+  text-align:center;
+  color:var(--text-muted);
+}
+.question-card{
+  padding:18px;
+  border-radius:14px;
+  border:1px solid rgba(255,255,255,.08);
+  background:var(--bg-card-soft);
+}
+.question-card header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  margin-bottom:12px;
+}
+.chip{
+  display:inline-flex;
+  align-items:center;
+  padding:4px 10px;
+  border-radius:999px;
+  background:rgba(255,255,255,.08);
+  font-size:.85rem;
+  font-weight:600;
+}
+.question-card .question-text{line-height:1.5}
+.choice-list{
+  list-style:none;
+  margin:14px 0 0;
+  padding:0;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+.choice{
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:12px;
+  padding:10px 14px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  background:rgba(255,255,255,.02);
+}
+.choice-label{
+  width:26px;
+  height:26px;
+  border-radius:8px;
+  background:rgba(255,255,255,.08);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:600;
+}
+.choice.correct{
+  border-color:rgba(74,222,128,.6);
+  background:rgba(74,222,128,.08);
+}
+.choice-flag{
+  margin-left:auto;
+  font-size:.75rem;
+  color:var(--success);
+}
 
 input,
 select,

@@ -11,7 +11,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
 import java.util.stream.Collectors;
@@ -88,12 +87,6 @@ public class CourseService {
     }
 
     private void applyWritableFields(Course course, CourseDtos.CreateRequest req, boolean creating) {
-        LocalDateTime now = LocalDateTime.now();
-        if (creating) {
-            course.setCreatedAt(now);
-        }
-        course.setUpdatedAt(now);
-
         if (req.title != null || creating) {
             String title = trimToNull(req.title);
             if (title == null) throw new IllegalArgumentException("Tiêu đề không được bỏ trống");

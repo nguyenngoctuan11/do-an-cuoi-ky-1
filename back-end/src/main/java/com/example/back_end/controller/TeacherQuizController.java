@@ -7,12 +7,17 @@ import com.example.back_end.repository.CourseRepository;
 import com.example.back_end.repository.UserRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -23,6 +28,7 @@ public class TeacherQuizController {
     private final CourseRepository courseRepository; private final UserRepository userRepository;
     public TeacherQuizController(CourseRepository courseRepository, UserRepository userRepository){ this.courseRepository=courseRepository; this.userRepository=userRepository; }
     private User currentUser(Authentication auth){ return userRepository.findByEmailIgnoreCase(String.valueOf(auth.getPrincipal())).orElseThrow(); }
+    private boolean isManager(Authentication auth){ return auth.getAuthorities().stream().anyMatch(a->a.getAuthority().equals("ROLE_MANAGER")); }
 
     @PostMapping
     @PreAuthorize("hasAnyRole('TEACHER','MANAGER')")
@@ -63,10 +69,136 @@ public class TeacherQuizController {
         return ResponseEntity.ok(list);
     }
 
+    @GetMapping("/{quizId}")
+    @PreAuthorize("hasAnyRole('TEACHER','MANAGER')")
+    public ResponseEntity<QuizDtos.QuizDetail> detail(@PathVariable Long quizId, Authentication auth){
+        QuizInfo info = requireQuiz(quizId, auth);
+        List<QuizDtos.QuestionDetail> questions = loadQuestionDetails(quizId);
+        QuizDtos.QuizDetail dto = new QuizDtos.QuizDetail();
+        dto.id = info.id;
+        dto.courseId = info.courseId;
+        dto.title = info.title;
+        dto.timeLimitSec = info.timeLimitSec;
+        dto.shuffle = info.shuffle;
+        dto.questions = questions;
+        dto.questionCount = questions.size();
+        return ResponseEntity.ok(dto);
+    }
+
+    @PutMapping("/{quizId}")
+    @PreAuthorize("hasAnyRole('TEACHER','MANAGER')")
+    @Transactional
+    public ResponseEntity<Map<String,Object>> update(@PathVariable Long quizId, @RequestBody QuizDtos.UpdateQuizRequest req, Authentication auth){
+        if(req == null){
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Thiếu dữ liệu cập nhật");
+        }
+        QuizInfo info = requireQuiz(quizId, auth);
+        String title = (req.title!=null && !req.title.isBlank()) ? req.title.trim() : info.title;
+        Integer time = (req.timeLimitSec!=null && req.timeLimitSec>0)? req.timeLimitSec : info.timeLimitSec;
+        boolean shuffle = req.shuffle!=null ? req.shuffle : Boolean.TRUE.equals(info.shuffle);
+        em.createNativeQuery("UPDATE dbo.quizzes SET title=?, time_limit_sec=?, shuffle=?, updated_at=SYSUTCDATETIME() WHERE id=?")
+                .setParameter(1, title)
+                .setParameter(2, time)
+                .setParameter(3, shuffle?1:0)
+                .setParameter(4, quizId)
+                .executeUpdate();
+        Map<String,Object> res = new LinkedHashMap<>();
+        res.put("id", quizId);
+        res.put("title", title);
+        res.put("timeLimitSec", time);
+        res.put("shuffle", shuffle);
+        return ResponseEntity.ok(res);
+    }
+
+    @DeleteMapping("/{quizId}")
+    @PreAuthorize("hasAnyRole('TEACHER','MANAGER')")
+    @Transactional
+    public ResponseEntity<Void> delete(@PathVariable Long quizId, Authentication auth){
+        requireQuiz(quizId, auth);
+        em.createNativeQuery("DELETE FROM dbo.quizzes WHERE id=:id")
+                .setParameter("id", quizId)
+                .executeUpdate();
+        return ResponseEntity.noContent().build();
+    }
+
+    private QuizInfo requireQuiz(Long quizId, Authentication auth){
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = (List<Object[]>) em.createNativeQuery(
+                "SELECT q.id, q.title, q.time_limit_sec, q.shuffle, q.course_id, c.created_by FROM dbo.quizzes q JOIN dbo.courses c ON c.id=q.course_id WHERE q.id=:id")
+                .setParameter("id", quizId).getResultList();
+        if(rows.isEmpty()){
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy đề kiểm tra");
+        }
+        Object[] r = rows.get(0);
+        if(!isManager(auth)){
+            Long ownerId = ((Number) r[5]).longValue();
+            if(!ownerId.equals(currentUser(auth).getId())){
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bạn không có quyền thao tác đề này");
+            }
+        }
+        QuizInfo info = new QuizInfo();
+        info.id = ((Number) r[0]).longValue();
+        info.title = String.valueOf(r[1]);
+        info.timeLimitSec = r[2]==null? null: ((Number) r[2]).intValue();
+        info.shuffle = toBoolean(r[3]);
+        info.courseId = ((Number) r[4]).longValue();
+        info.ownerId = ((Number) r[5]).longValue();
+        return info;
+    }
+
+    private boolean toBoolean(Object value){
+        if(value == null) return false;
+        if(value instanceof Boolean b) return b;
+        if(value instanceof Number n) return n.intValue() != 0;
+        return Boolean.parseBoolean(String.valueOf(value));
+    }
+
+    private List<QuizDtos.QuestionDetail> loadQuestionDetails(Long quizId){
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = (List<Object[]>) em.createNativeQuery(
+                "SELECT id, text, points, sort_order FROM dbo.questions WHERE quiz_id=:qid ORDER BY sort_order")
+                .setParameter("qid", quizId).getResultList();
+        @SuppressWarnings("unchecked")
+        List<Object[]> optRows = (List<Object[]>) em.createNativeQuery(
+                "SELECT q.id, o.id, o.text, o.is_correct, o.sort_order FROM dbo.question_options o JOIN dbo.questions q ON q.id=o.question_id WHERE q.quiz_id=:qid ORDER BY q.id, o.sort_order")
+                .setParameter("qid", quizId).getResultList();
+        Map<Long, List<QuizDtos.QuestionOptionDetail>> optionMap = new HashMap<>();
+        for(Object[] o : optRows){
+            Long qid = ((Number) o[0]).longValue();
+            QuizDtos.QuestionOptionDetail opt = new QuizDtos.QuestionOptionDetail();
+            opt.id = ((Number) o[1]).longValue();
+            opt.text = o[2]==null? "" : String.valueOf(o[2]);
+            opt.correct = toBoolean(o[3]);
+            optionMap.computeIfAbsent(qid, k->new ArrayList<>()).add(opt);
+        }
+        List<QuizDtos.QuestionDetail> details = new ArrayList<>();
+        for(Object[] row : rows){
+            QuizDtos.QuestionDetail q = new QuizDtos.QuestionDetail();
+            Long qid = ((Number) row[0]).longValue();
+            q.id = qid;
+            q.text = row[1]==null? "" : String.valueOf(row[1]);
+            q.points = row[2]==null? null: ((Number) row[2]).intValue();
+            q.sortOrder = row[3]==null? null: ((Number) row[3]).intValue();
+            q.options = optionMap.getOrDefault(qid, java.util.Collections.emptyList());
+            details.add(q);
+        }
+        return details;
+    }
+
+    private static class QuizInfo {
+        Long id;
+        String title;
+        Integer timeLimitSec;
+        Boolean shuffle;
+        Long courseId;
+        Long ownerId;
+    }
+
     @PostMapping("/{quizId}/questions")
     @PreAuthorize("hasAnyRole('TEACHER','MANAGER')")
     @Transactional
-    public ResponseEntity<?> addQuestion(@PathVariable Long quizId, @RequestBody QuizDtos.AddQuestionRequest req){
+    public ResponseEntity<?> addQuestion(@PathVariable Long quizId, @RequestBody QuizDtos.AddQuestionRequest req, Authentication auth){
+        requireQuiz(quizId, auth);
         Object qidObj = em.createNativeQuery(
                 "INSERT INTO dbo.questions(quiz_id, type, text, points, sort_order) " +
                 "OUTPUT inserted.id VALUES(?, N'sc', ?, ?, (SELECT ISNULL(MAX(sort_order),0)+1 FROM dbo.questions WHERE quiz_id=?))")

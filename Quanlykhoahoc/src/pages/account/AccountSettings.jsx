@@ -6,12 +6,25 @@ import {
   updateProfile,
 } from "../../services/profile";
 import { uploadImage } from "../../services/upload";
+import { API_BASE_URL } from "../../api/httpClient";
 
 const tabs = [
   { id: "profile", label: "Thông tin cá nhân", icon: "👤" },
   { id: "security", label: "Mật khẩu và bảo mật", icon: "🛡" },
   { id: "notifications", label: "Tùy chọn thông báo", icon: "🔔" },
 ];
+
+const API_BASE = API_BASE_URL?.replace(/\/+$/, "") || "";
+
+const resolveAssetUrl = (value) => {
+  if (!value) return "";
+  const raw = String(value).trim();
+  if (!raw) return "";
+  if (/^(?:https?:|data:|blob:)/i.test(raw)) return raw;
+  if (!API_BASE) return raw;
+  const normalized = raw.startsWith("/") ? raw : `/${raw}`;
+  return `${API_BASE}${normalized}`;
+};
 
 export default function AccountSettings() {
   const { user, refreshProfile } = useAuth();
@@ -434,33 +447,80 @@ function BioModal({ initialValue, onClose, onSuccess }) {
   );
 }
 
+
 function AvatarModal({ currentAvatar, fallback, onClose, onSuccess }) {
-  const [preview, setPreview] = useState(currentAvatar || "");
+  const [linkValue, setLinkValue] = useState(currentAvatar || "");
+  const [preview, setPreview] = useState(resolveAssetUrl(currentAvatar || ""));
+  const [selectedFile, setSelectedFile] = useState(null);
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(false);
   const fileRef = useRef(null);
+  const objectUrlRef = useRef(null);
 
-  const handleUpload = async (file) => {
-    if (!file) return;
-    try {
-      setLoading(true);
-      const { data } = await uploadImage(file);
-      setPreview(data.url);
-      setStatus({ type: "success", message: "Đã tải ảnh lên, hãy bấm lưu để áp dụng." });
-    } catch (err) {
-      const msg = err?.response?.data;
-      setStatus({ type: "error", message: typeof msg === "string" ? msg : msg?.message || "Không thể tải ảnh." });
-    } finally {
-      setLoading(false);
+  const revokePreviewUrl = () => {
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
     }
+  };
+
+  useEffect(() => () => revokePreviewUrl(), []);
+
+  const handleFileChange = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setStatus({ type: "error", message: "Vui lòng chọn ảnh hợp lệ." });
+      event.target.value = "";
+      return;
+    }
+
+    setSelectedFile(file);
+    revokePreviewUrl();
+    const objectUrl = URL.createObjectURL(file);
+    objectUrlRef.current = objectUrl;
+    setPreview(objectUrl);
+    setLinkValue("");
+    setStatus({ type: "success", message: "Ảnh mới đang được xem trước, bấm Lưu để xác nhận." });
+    event.target.value = "";
+  };
+
+  const handleLinkChange = (event) => {
+    const value = event.target.value;
+    setLinkValue(value);
+    setSelectedFile(null);
+    revokePreviewUrl();
+    setPreview(resolveAssetUrl(value));
+    setStatus(null);
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    if (!selectedFile && !linkValue.trim()) {
+      setStatus({ type: "error", message: "Vui lòng chọn ảnh hoặc dán đường dẫn." });
+      return;
+    }
+
     try {
       setLoading(true);
-      await updateProfile({ avatarUrl: preview });
+      let avatarUrl = linkValue.trim();
+
+      if (selectedFile) {
+        const { data } = await uploadImage(selectedFile);
+        avatarUrl = data.url;
+      }
+      if (!avatarUrl) {
+        setStatus({ type: "error", message: "Không tìm thấy đường dẫn ảnh hợp lệ." });
+        return;
+      }
+
+      await updateProfile({ avatarUrl });
       await onSuccess();
+
+      revokePreviewUrl();
+      setSelectedFile(null);
+      setPreview(resolveAssetUrl(avatarUrl));
+      setLinkValue(avatarUrl);
       setStatus({ type: "success", message: "Đã cập nhật ảnh đại diện." });
       setTimeout(onClose, 700);
     } catch (err) {
@@ -488,27 +548,21 @@ function AvatarModal({ currentAvatar, fallback, onClose, onSuccess }) {
           )}
         </div>
         <div className="grid gap-3">
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => handleUpload(e.target.files?.[0])}
-          />
+          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
           <button
             type="button"
             className="btn w-full"
             onClick={() => fileRef.current?.click()}
             disabled={loading}
           >
-            {loading ? "Đang tải..." : "Tải ảnh mới lên"}
+            {loading ? "Đang xử lý..." : "Tải ảnh mới lên"}
           </button>
           <label className="text-sm text-stone-600">
-            Hoặc dùng đường dẫn ảnh
+            Hoặc dán đường dẫn ảnh
             <input
               className="mt-2 w-full rounded-2xl border border-stone-200 px-4 py-2.5"
-              value={preview}
-              onChange={(e) => setPreview(e.target.value)}
+              value={linkValue}
+              onChange={handleLinkChange}
               placeholder="https://..."
             />
           </label>
@@ -517,7 +571,7 @@ function AvatarModal({ currentAvatar, fallback, onClose, onSuccess }) {
           <p className={`text-sm ${status.type === "success" ? "text-emerald-600" : "text-red-500"}`}>{status.message}</p>
         )}
         <button type="submit" className="btn btn-primary w-full" disabled={loading}>
-          {loading ? "Đang lưu..." : "Lưu lại"}
+          {loading ? "Đang lưu..." : "Lưu ảnh đại diện"}
         </button>
       </form>
     </ModalShell>

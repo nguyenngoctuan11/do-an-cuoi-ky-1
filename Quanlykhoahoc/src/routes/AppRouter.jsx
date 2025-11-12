@@ -7,7 +7,6 @@ import Courses from "../pages/Courses";
 import CourseDetail from "../pages/CourseDetail";
 import Blog from "../pages/Blog";
 import BlogDetail from "../pages/BlogDetail";
-import Pricing from "../pages/Pricing";
 import Survey from "../pages/Survey";
 import PathDetail from "../pages/PathDetail";
 import StudentDashboard from "../pages/student/StudentDashboard";
@@ -19,9 +18,6 @@ import Contact from "../pages/Contact";
 import NotFound from "../pages/NotFound";
 import LearnLayout from "../pages/learn/LearnLayout";
 import CoursePlayer from "../pages/learn/CoursePlayer";
-import QuizIntro from "../pages/quiz/QuizIntro";
-import QuizRun from "../pages/quiz/QuizRun";
-import QuizResult from "../pages/quiz/QuizResult";
 import Checkout from "../pages/checkout/Checkout";
 import CheckoutSuccess from "../pages/checkout/CheckoutSuccess";
 import CheckoutFailed from "../pages/checkout/CheckoutFailed";
@@ -42,7 +38,7 @@ const router = createBrowserRouter([
       { path: "/courses/:slug", element: <CourseDetail /> },
       { path: "/blog", element: <Blog /> },
       { path: "/blog/:slug", element: <BlogDetail /> },
-      { path: "/pricing", element: <Pricing /> },
+      
       { path: "/mentors", element: <Mentors /> },
       { path: "/faq", element: <FAQ /> },
       { path: "/about", element: <About /> },
@@ -66,9 +62,6 @@ const router = createBrowserRouter([
           { path: "lesson/:lessonId", element: <CoursePlayer /> },
         ],
       },
-      { path: "/quiz/:courseId", element: <QuizIntro /> },
-      { path: "/quiz/:courseId/run", element: <QuizRun /> },
-      { path: "/quiz/:courseId/result", element: <QuizResult /> },
       { path: "/login", element: <Login /> },
       { path: "/register", element: <Register /> },
       { path: "*", element: <NotFound /> },

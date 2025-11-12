@@ -11,11 +11,109 @@
 
     let currentCourse = null;
     let currentQuiz = null;
+    let editingQuizId = null;
 
-    const setMessage = (text='')=>{
+    const htmlEntities = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+    const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, ch => htmlEntities[ch] || ch);
+
+    const setMessage = (text = '') => {
       const box = el('msg');
-      if(box) box.textContent = text;
+      if (box) box.textContent = text;
     };
+
+    const resetQuizForm = () => {
+      el('quizTitle').value = '';
+      el('quizTime').value = 600;
+      el('quizShuffle').checked = false;
+    };
+
+    const toggleEditState = active => {
+      const badge = el('editBadge');
+      const updateBtn = el('updateQuiz');
+      const cancelBtn = el('cancelEdit');
+      if (active) {
+        badge.hidden = false;
+        updateBtn.style.display = 'inline-flex';
+        cancelBtn.style.display = 'inline-flex';
+        badge.textContent = `Đang chỉnh đề #${editingQuizId}`;
+      } else {
+        badge.hidden = true;
+        updateBtn.style.display = 'none';
+        cancelBtn.style.display = 'none';
+      }
+    };
+
+    const exitEditMode = () => {
+      editingQuizId = null;
+      toggleEditState(false);
+    };
+
+    const enterEditMode = detail => {
+      editingQuizId = detail.id;
+      el('quizTitle').value = detail.title || '';
+      el('quizTime').value = detail.timeLimitSec || '';
+      el('quizShuffle').checked = !!detail.shuffle;
+      toggleEditState(true);
+    };
+
+    const renderQuestionCard = (question, index) => {
+      const opts = Array.isArray(question.options) ? question.options : [];
+      const optionHtml = opts.length ? opts.map((opt, idx) => `
+        <li class="choice ${opt.correct ? 'correct' : ''}">
+          <span class="choice-label">${String.fromCharCode(65 + idx)}</span>
+          <span>${escapeHtml(opt.text || '')}</span>
+          ${opt.correct ? '<span class="choice-flag">Đáp án đúng</span>' : ''}
+        </li>`).join('') : '<li class="choice muted">Chưa có đáp án</li>';
+      return `
+        <article class="question-card">
+          <header>
+            <span class="chip">Câu ${index + 1}</span>
+            <span class="muted">${question.points || 1} điểm</span>
+          </header>
+          <div class="question-text">${question.text || ''}</div>
+          <ul class="choice-list">${optionHtml}</ul>
+        </article>`;
+    };
+
+    const renderQuestionList = detail => {
+      const meta = el('questionMeta');
+      const wrap = el('questionList');
+      const refresh = el('refreshQuestions');
+      if (!detail) {
+        meta.textContent = 'Chưa chọn đề nào';
+        wrap.innerHTML = '<div class="question-empty">Chọn một đề để xem nội dung.</div>';
+        refresh.disabled = true;
+        return;
+      }
+      const list = Array.isArray(detail.questions) ? detail.questions : [];
+      meta.textContent = `${detail.title || 'Đề'} • ${list.length} câu hỏi • ${detail.timeLimitSec || 0}s`;
+      refresh.disabled = false;
+      wrap.innerHTML = list.length ? list.map((q, idx) => renderQuestionCard(q, idx)).join('')
+        : '<div class="question-empty">Đề này chưa có câu hỏi nào.</div>';
+    };
+
+    const renderQuizRows = list => {
+      if (!list || !list.length) {
+        return '<tr><td colspan="5" class="muted">Chưa có bài kiểm tra nào</td></tr>';
+      }
+      return list.map(q => `
+        <tr>
+          <td>#${q.id}</td>
+          <td>
+            <div class="table-title">${q.title || ''}</div>
+            <div class="table-sub muted">${q.questions || 0} câu hỏi</div>
+          </td>
+          <td>${q.timeLimitSec || 0}s</td>
+          <td>${q.questions || 0}</td>
+          <td class="table-actions">
+            <button class="btn tiny ghost quiz-action" data-action="view" data-id="${q.id}">Xem</button>
+            <button class="btn tiny ghost quiz-action" data-action="edit" data-id="${q.id}">Chỉnh sửa</button>
+            <button class="btn tiny danger quiz-action" data-action="delete" data-id="${q.id}">Xóa</button>
+          </td>
+        </tr>`).join('');
+    };
+
+    const resetQuestionPreview = () => renderQuestionList(null);
 
     async function loadCourses(){
       if(!requireAuth(['TEACHER','MANAGER'])) return;
@@ -28,7 +126,11 @@
     async function onCourseChange(){
       currentCourse = Number(el('course').value)||null;
       currentQuiz = null;
+      editingQuizId = null;
       el('quizId').textContent = '-';
+      resetQuizForm();
+      exitEditMode();
+      resetQuestionPreview();
       setMessage('');
       if(currentCourse){ await loadQuizzes(currentCourse); }
       else{
@@ -39,22 +141,37 @@
     async function loadQuizzes(courseId){
       try{
         const list = await api(`/api/teacher/quizzes/course/${courseId}`);
-        el('quizzes').innerHTML = (list||[]).map(q=>`<tr>
-          <td>#${q.id}</td>
-          <td>${q.title||''}</td>
-          <td>${q.timeLimitSec||0}s</td>
-          <td>${q.questions||0}</td>
-          <td><button class="btn ghost choose" data-id="${q.id}">Chọn</button></td>
-        </tr>`).join('') || '<tr><td colspan="5" class="muted">Chưa có bài kiểm tra nào</td></tr>';
-        document.querySelectorAll('.choose').forEach(btn=>{
-          btn.onclick = ()=>{
-            currentQuiz = Number(btn.getAttribute('data-id'));
-            el('quizId').textContent = `#${currentQuiz}`;
-            setMessage(`Đang chỉnh sửa đề #${currentQuiz}`);
-          };
+        el('quizzes').innerHTML = renderQuizRows(list);
+        document.querySelectorAll('.quiz-action').forEach(btn=>{
+          const quizId = Number(btn.getAttribute('data-id'));
+          const action = btn.getAttribute('data-action');
+          if(!quizId) return;
+          if(action === 'view') btn.onclick = ()=>selectQuiz(quizId);
+          if(action === 'edit') btn.onclick = ()=>selectQuiz(quizId,{prefill:true});
+          if(action === 'delete') btn.onclick = ()=>deleteQuiz(quizId);
         });
       }catch(e){
         setMessage('Lỗi tải danh sách đề: ' + (e.message||e));
+      }
+    }
+
+    async function selectQuiz(quizId, opts = {}){
+      if(!quizId) return;
+      if(!opts.prefill && editingQuizId && editingQuizId !== quizId){
+        exitEditMode();
+      }
+      el('refreshQuestions').disabled = true;
+      try{
+        const detail = await api(`/api/teacher/quizzes/${quizId}`);
+        currentQuiz = quizId;
+        el('quizId').textContent = `#${quizId}`;
+        renderQuestionList(detail);
+        setMessage(`Đang xem đề #${quizId}`);
+        if(opts.prefill){
+          enterEditMode(detail);
+        }
+      }catch(e){
+        setMessage('Lỗi tải chi tiết đề: ' + (e.message||e));
       }
     }
 
@@ -68,9 +185,48 @@
         currentQuiz = res.id;
         el('quizId').textContent = `#${currentQuiz}`;
         setMessage(`Đã tạo đề #${currentQuiz}`);
+        resetQuizForm();
         await loadQuizzes(currentCourse);
+        await selectQuiz(currentQuiz, {prefill:true});
       }catch(e){
         setMessage('Lỗi tạo đề: ' + (e.message||e));
+      }
+    }
+
+    async function saveQuizChanges(){
+      if(!editingQuizId){ return; }
+      const title = el('quizTitle').value.trim();
+      const rawTime = Number(el('quizTime').value||0);
+      const shuffle = el('quizShuffle').checked;
+      const payload = { title, timeLimitSec: rawTime>0? rawTime: null, shuffle };
+      try{
+        await api(`/api/teacher/quizzes/${editingQuizId}`, { method:'PUT', body: JSON.stringify(payload)});
+        setMessage(`Đã cập nhật đề #${editingQuizId}`);
+        await loadQuizzes(currentCourse);
+        await selectQuiz(editingQuizId, {prefill:true});
+      }catch(e){
+        setMessage('Lỗi cập nhật đề: ' + (e.message||e));
+      }
+    }
+
+    async function deleteQuiz(quizId){
+      if(!currentCourse || !quizId) return;
+      if(!confirm(`Xóa đề #${quizId}?`)) return;
+      try{
+        await api(`/api/teacher/quizzes/${quizId}`, { method:'DELETE' });
+        if(currentQuiz === quizId){
+          currentQuiz = null;
+          el('quizId').textContent = '-';
+          resetQuestionPreview();
+        }
+        if(editingQuizId === quizId){
+          exitEditMode();
+          resetQuizForm();
+        }
+        setMessage(`Đã xóa đề #${quizId}`);
+        await loadQuizzes(currentCourse);
+      }catch(e){
+        setMessage('Lỗi xóa đề: ' + (e.message||e));
       }
     }
 
@@ -88,6 +244,7 @@
         ['A','B','C','D'].forEach(k=>{ el('opt'+k).value=''; el('correct'+k).checked=false; });
         setMessage('Đã thêm câu hỏi mới');
         await loadQuizzes(currentCourse);
+        await selectQuiz(currentQuiz, {prefill: editingQuizId === currentQuiz});
       }catch(e){
         setMessage('Lỗi thêm câu hỏi: ' + (e.message||e));
       }
@@ -107,9 +264,13 @@
       if(!url){ alert('Không nhận được đường dẫn file'); return; }
       const area = el('qText');
       if(kind==='image'){
-        area.value += `\n<img src="${url}" alt="" />\n`;
+        area.value += `
+<img src="${url}" alt="" />
+`;
       }else{
-        area.value += `\n<video src="${url}" controls></video>\n`;
+        area.value += `
+<video src="${url}" controls></video>
+`;
       }
       setMessage('Đã chèn media vào câu hỏi');
     }
@@ -118,10 +279,14 @@
       mountNav('nav');
       mountAdminMenu('adminMenu','teacher-quiz');
       mountAdminUser('adminUserCard');
+      resetQuestionPreview();
       loadCourses();
       el('course').addEventListener('change', onCourseChange);
       el('createQuiz').addEventListener('click', createQuiz);
+      el('updateQuiz').addEventListener('click', saveQuizChanges);
+      el('cancelEdit').addEventListener('click', ()=>{ exitEditMode(); resetQuizForm(); setMessage('Đã hủy chỉnh sửa'); });
       el('addQuestion').addEventListener('click', addQuestion);
+      el('refreshQuestions').addEventListener('click', ()=>{ if(currentQuiz) selectQuiz(currentQuiz, {prefill: editingQuizId === currentQuiz}); });
       el('upImg').addEventListener('click', ()=>upload('image','mediaImage'));
       el('upVid').addEventListener('click', ()=>upload('video','mediaVideo'));
     });
@@ -148,90 +313,121 @@
           <p class="muted">Chọn khóa học để bắt đầu</p>
           <h1>Trình soạn đề</h1>
         </div>
-        <div class="card">
-          <h2>Danh sách đề theo khóa học</h2>
-          <div class="row">
-            <select id="course"></select>
-            <div class="badge">Đề hiện tại: <span id="quizId">-</span></div>
-          </div>
-          <div style="overflow:auto;margin-top:16px">
-            <table>
-              <thead><tr><th>ID</th><th>Tiêu đề</th><th>Thời gian</th><th>Số câu</th><th></th></tr></thead>
-              <tbody id="quizzes"><tr><td colspan="5" class="muted">Chọn khóa học để xem đề</td></tr></tbody>
-            </table>
-          </div>
-          <p id="msg" class="muted" style="margin-top:12px"></p>
-        </div>
-
-        <div class="card">
-          <h2>Tạo đề mới</h2>
-          <div class="row">
-            <input id="quizTitle" placeholder="Tiêu đề đề kiểm tra"/>
-            <input id="quizTime" type="number" min="30" value="600" placeholder="Thời gian (giây)"/>
-            <label style="display:flex;align-items:center;gap:8px">
-              <input type="checkbox" id="quizShuffle"/>
-              <span>Trộn câu hỏi</span>
-            </label>
-          </div>
-          <button class="btn" id="createQuiz" style="margin-top:12px">+ Tạo đề</button>
-        </div>
-
-        <div class="card">
-          <h2>Thêm câu hỏi</h2>
-          <label>Nội dung</label>
-          <textarea id="qText" placeholder="Nhập câu hỏi, có thể chèn HTML cơ bản"></textarea>
-          <div class="row" style="margin-top:12px">
-            <input id="qPoint" type="number" min="1" value="1" placeholder="Điểm"/>
-            <div class="row" style="flex:2">
-              <input type="file" id="mediaImage" accept="image/*"/>
-              <button id="upImg" class="btn ghost">Chèn ảnh</button>
-              <input type="file" id="mediaVideo" accept="video/*"/>
-              <button id="upVid" class="btn ghost">Chèn video</button>
+        <div class="quiz-layout">
+          <section class="quiz-column">
+            <div class="card quiz-card">
+              <div class="card-heading">
+                <div>
+                  <h2>Danh sách đề</h2>
+                  <p class="muted">Quản lý đề trắc nghiệm theo từng khóa học.</p>
+                </div>
+                <div class="badge">Đề hiện tại: <span id="quizId">-</span></div>
+              </div>
+              <div class="row select-row">
+                <select id="course"></select>
+              </div>
+              <div class="table-scroll">
+                <table>
+                  <thead><tr><th>ID</th><th>Tiêu đề</th><th>Thời gian</th><th>Số câu</th><th>Hành động</th></tr></thead>
+                  <tbody id="quizzes"><tr><td colspan="5" class="muted">Chọn khóa học để xem đề</td></tr></tbody>
+                </table>
+              </div>
+              <p id="msg" class="muted status-hint"></p>
             </div>
-          </div>
-          <div class="grid" style="margin-top:16px">
-            <div class="option-row">
-              <label>Đáp án A</label>
-              <div class="row">
-                <input id="optA" placeholder="Nội dung đáp án A"/>
-                <label style="display:flex;align-items:center;gap:6px">
-                  <input type="checkbox" id="correctA"/>
-                  Đúng
-                </label>
+            <div class="card quiz-card">
+              <div class="card-heading">
+                <div>
+                  <h2>Câu hỏi trong đề</h2>
+                  <p class="muted" id="questionMeta">Chưa chọn đề nào</p>
+                </div>
+                <button class="btn tiny ghost" id="refreshQuestions" disabled>↻ Làm mới</button>
+              </div>
+              <div id="questionList" class="question-list">
+                <div class="question-empty">Chọn một đề để xem nội dung.</div>
               </div>
             </div>
-            <div class="option-row">
-              <label>Đáp án B</label>
-              <div class="row">
-                <input id="optB" placeholder="Nội dung đáp án B"/>
-                <label style="display:flex;align-items:center;gap:6px">
-                  <input type="checkbox" id="correctB"/>
-                  Đúng
+          </section>
+          <section class="quiz-column">
+            <div class="card quiz-card">
+              <div class="card-heading">
+                <div>
+                  <h2>Thông tin đề</h2>
+                  <p class="muted">Tạo mới hoặc chỉnh sửa đề đã chọn.</p>
+                </div>
+                <span class="badge" id="editBadge" hidden>Đang chỉnh đề</span>
+              </div>
+              <div class="form-grid compact">
+                <input id="quizTitle" placeholder="Tiêu đề đề kiểm tra"/>
+                <input id="quizTime" type="number" min="30" value="600" placeholder="Thời gian (giây)"/>
+                <label class="toggle">
+                  <input type="checkbox" id="quizShuffle"/>
+                  <span>Trộn câu hỏi</span>
                 </label>
               </div>
-            </div>
-            <div class="option-row">
-              <label>Đáp án C</label>
-              <div class="row">
-                <input id="optC" placeholder="Nội dung đáp án C"/>
-                <label style="display:flex;align-items:center;gap:6px">
-                  <input type="checkbox" id="correctC"/>
-                  Đúng
-                </label>
+              <div class="form-actions">
+                <button class="btn" id="createQuiz">+ Tạo đề</button>
+                <button class="btn secondary" id="updateQuiz" style="display:none">Lưu thay đổi</button>
+                <button class="btn ghost" id="cancelEdit" style="display:none">Hủy chỉnh sửa</button>
               </div>
             </div>
-            <div class="option-row">
-              <label>Đáp án D</label>
-              <div class="row">
-                <input id="optD" placeholder="Nội dung đáp án D"/>
-                <label style="display:flex;align-items:center;gap:6px">
-                  <input type="checkbox" id="correctD"/>
-                  Đúng
-                </label>
+            <div class="card quiz-card">
+              <h2>Thêm câu hỏi</h2>
+              <label>Nội dung</label>
+              <textarea id="qText" placeholder="Nhập câu hỏi, có thể chèn HTML cơ bản"></textarea>
+              <div class="row media-row">
+                <input id="qPoint" type="number" min="1" value="1" placeholder="Điểm"/>
+                <div class="row media-actions">
+                  <input type="file" id="mediaImage" accept="image/*"/>
+                  <button id="upImg" class="btn ghost">Chèn ảnh</button>
+                  <input type="file" id="mediaVideo" accept="video/*"/>
+                  <button id="upVid" class="btn ghost">Chèn video</button>
+                </div>
               </div>
+              <div class="option-grid">
+                <div class="option-row">
+                  <label>Đáp án A</label>
+                  <div class="row">
+                    <input id="optA" placeholder="Nội dung đáp án A"/>
+                    <label class="option-check">
+                      <input type="checkbox" id="correctA"/>
+                      <span>Đúng</span>
+                    </label>
+                  </div>
+                </div>
+                <div class="option-row">
+                  <label>Đáp án B</label>
+                  <div class="row">
+                    <input id="optB" placeholder="Nội dung đáp án B"/>
+                    <label class="option-check">
+                      <input type="checkbox" id="correctB"/>
+                      <span>Đúng</span>
+                    </label>
+                  </div>
+                </div>
+                <div class="option-row">
+                  <label>Đáp án C</label>
+                  <div class="row">
+                    <input id="optC" placeholder="Nội dung đáp án C"/>
+                    <label class="option-check">
+                      <input type="checkbox" id="correctC"/>
+                      <span>Đúng</span>
+                    </label>
+                  </div>
+                </div>
+                <div class="option-row">
+                  <label>Đáp án D</label>
+                  <div class="row">
+                    <input id="optD" placeholder="Nội dung đáp án D"/>
+                    <label class="option-check">
+                      <input type="checkbox" id="correctD"/>
+                      <span>Đúng</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+              <button class="btn" id="addQuestion" style="margin-top:16px">+ Thêm câu hỏi</button>
             </div>
-          </div>
-          <button class="btn" id="addQuestion" style="margin-top:16px">+ Thêm câu hỏi</button>
+          </section>
         </div>
       </main>
     </div>

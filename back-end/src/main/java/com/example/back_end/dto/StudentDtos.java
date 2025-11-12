@@ -12,5 +12,13 @@ public class StudentDtos {
         public Long courseId; public String title; public String slug; public String level; public String thumbnailUrl;
         public BigDecimal price; public String status; public LocalDateTime enrolledAt;
     }
+    public static class CourseProgress {
+        public Long courseId;
+        public String courseSlug;
+        public int totalLessons;
+        public int completedLessons;
+        public double completionPercent;
+        public List<Long> completedLessonIds;
+    }
 }
 

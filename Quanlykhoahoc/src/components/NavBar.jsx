@@ -1,11 +1,11 @@
 import React, { useMemo, useRef, useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { API_BASE_URL } from "../api/httpClient";
 
 const navItems = [
   { path: "/courses", label: "Khóa học" },
   { path: "/mentors", label: "Mentor" },
-  { path: "/pricing", label: "Bảng giá" },
   { path: "/survey", label: "Khảo sát lộ trình" },
   { path: "/blog", label: "Blog" },
   { path: "/faq", label: "Hỏi đáp" },
@@ -23,6 +23,17 @@ const bellIcon = (
   </svg>
 );
 
+const API_BASE = API_BASE_URL?.replace(/\/+$/, "") || "";
+
+const resolveAvatarUrl = (value) => {
+  if (!value) return "";
+  const raw = String(value).trim();
+  if (!raw) return "";
+  if (/^(?:https?:|data:|blob:)/i.test(raw)) return raw;
+  const normalized = raw.startsWith("/") ? raw : `/${raw}`;
+  return `${API_BASE}${normalized}`;
+};
+
 export default function NavBar() {
   const navigate = useNavigate();
   const { isAuthenticated, user, logout } = useAuth();
@@ -30,6 +41,7 @@ export default function NavBar() {
   const linkCls = ({ isActive }) =>
     `text-sm ${isActive ? "text-stone-900" : "text-stone-700 hover:text-stone-900"}`;
 
+  const avatarUrl = useMemo(() => resolveAvatarUrl(user?.avatarUrl), [user?.avatarUrl]);
   const userInitial = (user?.fullName || user?.email || "U").trim().charAt(0).toUpperCase();
 
   return (
@@ -70,9 +82,15 @@ export default function NavBar() {
             >
               {bellIcon}
             </button>
-            <UserDropdown user={user} onLogout={() => { logout(); navigate("/login"); }}>
-              <span className="font-semibold text-stone-900">{userInitial}</span>
-            </UserDropdown>
+            <UserDropdown
+              user={user}
+              avatarUrl={avatarUrl}
+              fallbackInitial={userInitial}
+              onLogout={() => {
+                logout();
+                navigate("/login");
+              }}
+            />
           </div>
         )}
       </div>
@@ -80,10 +98,12 @@ export default function NavBar() {
   );
 }
 
-function UserDropdown({ user, onLogout, children }) {
+function UserDropdown({ user, avatarUrl, fallbackInitial, onLogout }) {
   const [open, setOpen] = useState(false);
   const hoverTimeout = useRef(null);
   const usernameDisplay = user?.username ? `@${user.username}` : user?.email || "";
+
+  const displayInitial = (fallbackInitial || "U").trim().charAt(0).toUpperCase();
 
   const quickLinks = useMemo(
     () => [
@@ -131,15 +151,23 @@ function UserDropdown({ user, onLogout, children }) {
       <button
         type="button"
         onClick={handleToggle}
-        className="w-10 h-10 rounded-full bg-teal-600 text-white grid place-items-center font-semibold shadow focus:outline-none focus:ring-2 focus:ring-teal-300"
+        className={`w-10 h-10 rounded-full overflow-hidden grid place-items-center shadow focus:outline-none focus:ring-2 focus:ring-teal-300 ${avatarUrl ? "" : "bg-teal-600 text-white font-semibold"}`}
       >
-        {children}
+        {avatarUrl ? (
+          <img src={avatarUrl} alt={user?.fullName || "Avatar"} className="w-full h-full object-cover" />
+        ) : (
+          <span>{displayInitial}</span>
+        )}
       </button>
       {open && (
         <div className="absolute right-0 mt-3 w-64 rounded-3xl bg-white shadow-2xl border border-stone-100">
           <div className="p-4 flex items-center gap-3">
-            <div className="w-12 h-12 rounded-full bg-teal-100 text-teal-700 grid place-items-center font-semibold text-lg">
-              {(user?.fullName || user?.email || "U").trim().charAt(0).toUpperCase()}
+            <div className="w-12 h-12 rounded-full overflow-hidden bg-teal-100 text-teal-700 grid place-items-center font-semibold text-lg">
+              {avatarUrl ? (
+                <img src={avatarUrl} alt={user?.fullName || "Avatar"} className="w-full h-full object-cover" />
+              ) : (
+                <span>{displayInitial}</span>
+              )}
             </div>
             <div>
               <p className="font-semibold text-stone-900">{user?.fullName || "Chưa cập nhật"}</p>
