@@ -5,6 +5,7 @@ import Register from "../pages/Register";
 import Home from "../pages/Home";
 import Courses from "../pages/Courses";
 import CourseDetail from "../pages/CourseDetail";
+import ExamPlayer from "../pages/exams/ExamPlayer";
 import Blog from "../pages/Blog";
 import BlogDetail from "../pages/BlogDetail";
 import Survey from "../pages/Survey";
@@ -36,6 +37,14 @@ const router = createBrowserRouter([
       { path: "/student", element: <StudentDashboard /> },
       { path: "/my-courses", element: <MyCourses /> },
       { path: "/courses/:slug", element: <CourseDetail /> },
+      {
+        path: "/courses/:courseId/exams/:examId",
+        element: (
+          <RequireAuth>
+            <ExamPlayer />
+          </RequireAuth>
+        ),
+      },
       { path: "/blog", element: <Blog /> },
       { path: "/blog/:slug", element: <BlogDetail /> },
       

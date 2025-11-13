@@ -24,10 +24,17 @@ public class PublicCourseSqlController {
     public ResponseEntity<List<CourseCardSqlProjection>> list(
             @RequestParam(defaultValue = "0") int offset,
             @RequestParam(defaultValue = "12") int limit,
-            @RequestParam(required = false) String status
+            @RequestParam(required = false) String status,
+            @RequestParam(value = "q", required = false) String keyword
     ) {
         int safeLimit = Math.max(1, Math.min(limit, 100));
-        return ResponseEntity.ok(courseRepository.findCourseCardsSql(status, offset, safeLimit));
+        String normalizedKeyword = normalizeKeyword(keyword);
+        return ResponseEntity.ok(courseRepository.findCourseCardsSql(status, offset, safeLimit, normalizedKeyword));
+    }
+
+    private String normalizeKeyword(String keyword) {
+        if (keyword == null) return null;
+        String trimmed = keyword.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 }
-

@@ -573,6 +573,53 @@ CREATE TABLE dbo.prerequisites (
   CONSTRAINT fk_prereq_required FOREIGN KEY (required_course_id) REFERENCES dbo.courses(id) ON DELETE CASCADE
 );
 
+-- =======================
+-- Orders & Payments
+-- =======================
+IF OBJECT_ID('dbo.payments', 'U') IS NOT NULL DROP TABLE dbo.payments;
+IF OBJECT_ID('dbo.orders', 'U') IS NOT NULL DROP TABLE dbo.orders;
+
+CREATE TABLE dbo.orders (
+  id BIGINT IDENTITY(1,1) PRIMARY KEY,
+  user_id BIGINT NOT NULL,
+  course_id BIGINT NOT NULL,
+  external_code NVARCHAR(64) NULL,
+  amount DECIMAL(18,2) NOT NULL CONSTRAINT df_orders_amount DEFAULT 0,
+  currency NVARCHAR(8) NOT NULL CONSTRAINT df_orders_currency DEFAULT N'VND',
+  method NVARCHAR(16) NOT NULL CONSTRAINT df_orders_method DEFAULT N'BANK',
+  status NVARCHAR(16) NOT NULL CONSTRAINT df_orders_status DEFAULT N'pending',
+  provider NVARCHAR(32) NULL,
+  provider_txn NVARCHAR(128) NULL,
+  return_url NVARCHAR(256) NULL,
+  cancel_url NVARCHAR(256) NULL,
+  note NVARCHAR(512) NULL,
+  metadata NVARCHAR(MAX) NULL,
+  paid_at DATETIME2 NULL,
+  created_at DATETIME2 NOT NULL CONSTRAINT df_orders_created DEFAULT GETUTCDATE(),
+  updated_at DATETIME2 NOT NULL CONSTRAINT df_orders_updated DEFAULT GETUTCDATE(),
+  CONSTRAINT fk_orders_user FOREIGN KEY (user_id) REFERENCES dbo.users(id),
+  CONSTRAINT fk_orders_course FOREIGN KEY (course_id) REFERENCES dbo.courses(id)
+);
+CREATE INDEX idx_orders_user ON dbo.orders(user_id);
+CREATE INDEX idx_orders_course ON dbo.orders(course_id);
+CREATE UNIQUE INDEX uq_orders_external_code ON dbo.orders(external_code) WHERE external_code IS NOT NULL;
+
+CREATE TABLE dbo.payments (
+  id BIGINT IDENTITY(1,1) PRIMARY KEY,
+  order_id BIGINT NOT NULL,
+  provider NVARCHAR(16) NOT NULL CONSTRAINT df_payments_provider DEFAULT N'unknown',
+  provider_txn_id NVARCHAR(128) NULL,
+  channel NVARCHAR(32) NULL,
+  amount DECIMAL(18,2) NOT NULL CONSTRAINT df_payments_amount DEFAULT 0,
+  status NVARCHAR(16) NOT NULL CONSTRAINT df_payments_status DEFAULT N'pending',
+  payload NVARCHAR(MAX) NULL,
+  created_at DATETIME2 NOT NULL CONSTRAINT df_payments_created DEFAULT GETUTCDATE(),
+  updated_at DATETIME2 NOT NULL CONSTRAINT df_payments_updated DEFAULT GETUTCDATE(),
+  CONSTRAINT fk_payments_order FOREIGN KEY (order_id) REFERENCES dbo.orders(id) ON DELETE CASCADE
+);
+CREATE INDEX idx_payments_order ON dbo.payments(order_id);
+CREATE INDEX idx_payments_provider ON dbo.payments(provider, provider_txn_id);
+
 -- Helpful indexes
 CREATE INDEX idx_courses_status_publish ON dbo.courses(status, publish_at);
 CREATE INDEX idx_lessons_module_sort ON dbo.lessons(module_id, sort_order);

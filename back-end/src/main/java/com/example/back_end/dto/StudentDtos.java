@@ -9,8 +9,15 @@ public class StudentDtos {
         public Long id; public String email; public String fullName; public List<String> roles;
     }
     public static class EnrolledCourse {
-        public Long courseId; public String title; public String slug; public String level; public String thumbnailUrl;
-        public BigDecimal price; public String status; public LocalDateTime enrolledAt;
+        public Long courseId;
+        public String title;
+        public String slug;
+        public String level;
+        public String thumbnailUrl;
+        public BigDecimal price;
+        public Boolean isFree;
+        public String status;
+        public LocalDateTime enrolledAt;
     }
     public static class CourseProgress {
         public Long courseId;

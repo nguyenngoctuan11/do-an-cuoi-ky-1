@@ -43,7 +43,7 @@ public class StudentController {
     public ResponseEntity<List<StudentDtos.EnrolledCourse>> enrollments(Authentication auth){
         Long uid = currentUser(auth).getId();
         List<Object[]> rows = em.createNativeQuery(
-                "SELECT c.id, c.title, c.slug, c.level, c.thumbnail_url, c.price, e.status, e.start_at\n"+
+                "SELECT c.id, c.title, c.slug, c.level, c.thumbnail_url, c.price, c.is_free, e.status, e.start_at\n"+
                 "FROM dbo.enrollments e JOIN dbo.courses c ON c.id = e.course_id\n"+
                 "WHERE e.user_id = :uid ORDER BY e.start_at DESC")
                 .setParameter("uid", uid)
@@ -56,11 +56,27 @@ public class StudentController {
             ec.level = r[3]!=null? r[3].toString(): null;
             ec.thumbnailUrl = r[4]!=null? r[4].toString(): null;
             ec.price = (r[5] instanceof BigDecimal)? (BigDecimal) r[5]: null;
-            ec.status = r[6]!=null? r[6].toString(): null;
-            ec.enrolledAt = r[7] instanceof java.sql.Timestamp? ((java.sql.Timestamp) r[7]).toLocalDateTime(): (LocalDateTime) r[7];
+            Boolean isFreeFlag = mapIsFree(r[6]);
+            if (isFreeFlag == null && ec.price != null) {
+                isFreeFlag = ec.price.compareTo(BigDecimal.ZERO) <= 0;
+            }
+            ec.isFree = isFreeFlag;
+            ec.status = r[7]!=null? r[7].toString(): null;
+            ec.enrolledAt = r[8] instanceof java.sql.Timestamp? ((java.sql.Timestamp) r[8]).toLocalDateTime(): (LocalDateTime) r[8];
             return ec;
         }).collect(Collectors.toList());
         return ResponseEntity.ok(list);
+    }
+
+    private Boolean mapIsFree(Object value) {
+        if (value == null) return null;
+        if (value instanceof Boolean) return (Boolean) value;
+        if (value instanceof Number) return ((Number) value).intValue() != 0;
+        String txt = value.toString().trim();
+        if (txt.isEmpty()) return null;
+        if ("1".equals(txt)) return true;
+        if ("0".equals(txt)) return false;
+        return Boolean.parseBoolean(txt);
     }
 }
 

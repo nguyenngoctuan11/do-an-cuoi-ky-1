@@ -3,6 +3,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import SectionHeading from "../components/SectionHeading";
 import { normalizePriceValue, resolveIsFree } from "../utils/price";
+import httpClient from "../api/httpClient";
+import { useAuth } from "../context/AuthContext";
 
 const API_BASE = process.env.REACT_APP_API_BASE || "";
 const moneyFormatter = new Intl.NumberFormat("vi-VN");
@@ -44,6 +46,106 @@ function resolveThumb(u) {
   return `${API_BASE}${s}`;
 }
 
+function parseTimeLike(value) {
+  if (value == null) return null;
+  if (typeof value === "number") {
+    const num = Number(value);
+    return Number.isFinite(num) ? num : null;
+  }
+  const str = String(value).trim();
+  if (!str) return null;
+  if (/^\d+$/.test(str)) {
+    const num = Number(str);
+    return Number.isFinite(num) ? num : null;
+  }
+  if (str.includes(":")) {
+    const parts = str.split(":").map((part) => Number(part));
+    if (parts.every((n) => Number.isFinite(n))) {
+      if (parts.length === 3) {
+        return parts[0] * 3600 + parts[1] * 60 + parts[2];
+      }
+      if (parts.length === 2) {
+        return parts[0] * 60 + parts[1];
+      }
+      if (parts.length === 1) {
+        return parts[0];
+      }
+    }
+  }
+  return null;
+}
+
+function extractLessonDurationSeconds(lesson) {
+  if (!lesson) return 0;
+  const secondCandidates = [
+    lesson.durationSeconds,
+    lesson.duration_seconds,
+    lesson.durationInSeconds,
+    lesson.video_duration,
+    lesson.videoDuration,
+    lesson.total_seconds,
+    lesson.seconds,
+    lesson.duration,
+  ];
+  for (const candidate of secondCandidates) {
+    const parsed = parseTimeLike(candidate);
+    if (parsed && parsed > 0) return parsed;
+  }
+  const minuteCandidates = [lesson.duration_minutes, lesson.durationMinutes, lesson.minutes];
+  for (const candidate of minuteCandidates) {
+    const parsed = parseTimeLike(candidate);
+    if (parsed && parsed > 0) return parsed * 60;
+  }
+  return 0;
+}
+
+function formatLessonDurationLabel(seconds) {
+  const total = Number(seconds);
+  if (!Number.isFinite(total) || total <= 0) return null;
+  if (total < 60) return `${Math.round(total)}s`;
+  const minutes = Math.floor(total / 60);
+  const remainSeconds = total % 60;
+  if (minutes < 60) {
+    return remainSeconds ? `${minutes}p${String(Math.round(remainSeconds)).padStart(2, "0")}s` : `${minutes} phút`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const remainMinutes = minutes % 60;
+  return remainMinutes ? `${hours}h ${remainMinutes}p` : `${hours}h`;
+}
+
+function stripHtmlTags(value) {
+  if (!value) return "";
+  return String(value).replace(/<[^>]*>/g, "").trim();
+}
+
+function normalizeModuleList(modules) {
+  if (!Array.isArray(modules)) return [];
+  return modules.map((module, mIdx) => {
+    const lessonsRaw = Array.isArray(module.lessons) ? module.lessons : module.items ?? [];
+    const lessons = lessonsRaw.map((lesson, lIdx) => {
+      const durationSeconds = extractLessonDurationSeconds(lesson);
+      return {
+        ...lesson,
+        id: lesson.id ?? lesson.lesson_id ?? `lesson-${mIdx}-${lIdx}`,
+        title: lesson.title ?? lesson.name ?? `Bài ${lIdx + 1}`,
+        description: stripHtmlTags(lesson.description ?? lesson.summary ?? lesson.sub_title ?? lesson.subtitle ?? ""),
+        content: stripHtmlTags(lesson.content ?? lesson.details ?? ""),
+        durationSeconds,
+        durationLabel: formatLessonDurationLabel(durationSeconds),
+        video_url: lesson.video_url ?? lesson.videoUrl ?? lesson.video ?? lesson.video_link ?? lesson.videoLink ?? null,
+      };
+    });
+    const durationSeconds = lessons.reduce((sum, lesson) => sum + (lesson.durationSeconds || 0), 0);
+    return {
+      ...module,
+      id: module.id ?? module.module_id ?? module.chapter_id ?? `module-${mIdx}`,
+      title: module.title ?? module.name ?? module.chapter_title ?? `Chương ${mIdx + 1}`,
+      lessons,
+      durationSeconds,
+    };
+  });
+}
+
 function summarizeModules(modules) {
   let totalLessons = 0;
   let totalSeconds = 0;
@@ -52,9 +154,10 @@ function summarizeModules(modules) {
     const lessons = Array.isArray(module.lessons) ? module.lessons : [];
     totalLessons += lessons.length;
     for (const lesson of lessons) {
-      const seconds = Number(lesson.duration_seconds ?? lesson.durationSeconds ?? 0);
+      const seconds = extractLessonDurationSeconds(lesson);
       if (Number.isFinite(seconds)) totalSeconds += seconds;
-      if (!firstLessonWithVideo && lesson.video_url) {
+      const videoUrl = lesson.video_url ?? lesson.videoUrl ?? lesson.video ?? lesson.video_link ?? lesson.videoLink;
+      if (!firstLessonWithVideo && videoUrl) {
         firstLessonWithVideo = lesson;
       }
     }
@@ -65,11 +168,18 @@ function summarizeModules(modules) {
 export default function CourseDetail() {
   const { slug } = useParams();
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showPreview, setShowPreview] = useState(false);
   const previewRef = useRef(null);
+  const [enrolling, setEnrolling] = useState(false);
+  const [enrolled, setEnrolled] = useState(false);
+  const [enrollError, setEnrollError] = useState("");
+  const [syllabus, setSyllabus] = useState([]);
+  const [syllabusLoading, setSyllabusLoading] = useState(false);
+  const [syllabusError, setSyllabusError] = useState("");
 
   useEffect(() => {
     let alive = true;
@@ -154,11 +264,61 @@ export default function CourseDetail() {
     };
   }, [data, slug]);
 
+  const normalizedBaseModules = useMemo(() => normalizeModuleList(view.modules || []), [view.modules]);
+
+  useEffect(() => {
+    if (!view.id) {
+      setSyllabus([]);
+      return;
+    }
+    let cancelled = false;
+    setSyllabus(normalizedBaseModules);
+    setSyllabusLoading(true);
+    setSyllabusError("");
+    fetch(`${API_BASE}/api/public/courses/${view.id}/detail-sql`, { headers: { Accept: "application/json" } })
+      .then((res) => {
+        if (!res.ok) throw new Error("Không tải được nội dung khóa học");
+        return res.json();
+      })
+      .then((payload) => {
+        if (cancelled) return;
+        const rawModules = payload?.modules?.length ? payload.modules : payload?.chapters || [];
+        const normalized = normalizeModuleList(rawModules);
+        setSyllabus(normalized.length ? normalized : normalizedBaseModules);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setSyllabusError(err?.message || "Không tải được nội dung khóa học");
+        setSyllabus(normalizedBaseModules);
+      })
+      .finally(() => {
+        if (!cancelled) setSyllabusLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [view.id, normalizedBaseModules]);
+
+  const modulesForDisplay = useMemo(
+    () => (syllabus.length ? syllabus : normalizedBaseModules),
+    [syllabus, normalizedBaseModules],
+  );
+
+  const modulesStats = useMemo(() => summarizeModules(modulesForDisplay), [modulesForDisplay]);
+  const totalLessons = modulesStats.totalLessons || view.stats.totalLessons;
+  const totalDurationLabel = secondsToLabel(modulesStats.totalSeconds) || view.stats.totalDurationLabel;
+  const moduleCount = modulesForDisplay.length || view.stats.moduleCount;
+  const previewLesson = modulesStats.firstLessonWithVideo || view.previewLesson;
+
   const isFreeCourse = view.isFree;
   const priceLabel = isFreeCourse ? "Miễn phí" : formatMoney(view.price) || "Đang cập nhật";
 
   const handleStartCourse = () => {
     if (!view.id) return;
+    if (!isAuthenticated) {
+      navigate("/login", { state: { from: `/courses/${slug}` } });
+      return;
+    }
     navigate(`/learn/${view.id}`, { state: { from: `/courses/${slug}` } });
   };
 
@@ -172,6 +332,32 @@ export default function CourseDetail() {
       previewRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 150);
   };
+
+  const handleFreeEnroll = async () => {
+    if (!view.id) return;
+    if (!isAuthenticated) {
+      navigate("/login", { state: { from: `/courses/${slug}` } });
+      return;
+    }
+    setEnrollError("");
+    setEnrolling(true);
+    try {
+      await httpClient.post(`/api/courses/${view.id}/enroll`);
+      setEnrolled(true);
+      handleStartCourse();
+    } catch (err) {
+      const msg = err?.response?.data?.message || "Ghi danh không thành công. Vui lòng thử lại.";
+      setEnrollError(msg);
+    } finally {
+      setEnrolling(false);
+    }
+  };
+
+  useEffect(() => {
+    setEnrolling(false);
+    setEnrolled(false);
+    setEnrollError("");
+  }, [slug]);
 
   if (loading) {
     return <div className="max-w-7xl mx-auto px-4 py-12 text-stone-600">Đang tải chi tiết khóa học…</div>;
@@ -187,7 +373,7 @@ export default function CourseDetail() {
   const statCards = [
     {
       label: "Bài học",
-      value: view.stats.totalLessons || "Đang cập nhật",
+      value: totalLessons || "Đang cập nhật",
       icon: (
         <svg viewBox="0 0 24 24" className="h-6 w-6 text-primary-600" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M4 6h16M4 12h16M4 18h10" />
@@ -196,7 +382,7 @@ export default function CourseDetail() {
     },
     {
       label: "Thời lượng",
-      value: view.stats.totalDurationLabel || "Đang cập nhật",
+      value: totalDurationLabel || "Đang cập nhật",
       icon: (
         <svg viewBox="0 0 24 24" className="h-6 w-6 text-primary-600" fill="none" stroke="currentColor" strokeWidth="2">
           <circle cx="12" cy="12" r="9" />
@@ -206,7 +392,7 @@ export default function CourseDetail() {
     },
     {
       label: "Chương học",
-      value: view.stats.moduleCount || "Đang cập nhật",
+      value: moduleCount || "Đang cập nhật",
       icon: (
         <svg viewBox="0 0 24 24" className="h-6 w-6 text-primary-600" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M5 4h14v16H5z" />
@@ -256,17 +442,17 @@ export default function CourseDetail() {
               <div ref={previewRef} className="rounded-3xl border border-stone-200 bg-white p-6 shadow-sm">
                 <p className="text-sm font-semibold text-primary-600">Học thử</p>
                 <h3 className="mt-2 text-2xl font-bold text-stone-900">
-                  {view.previewLesson?.title || "Video giới thiệu khóa học"}
+                  {previewLesson?.title || "Video giới thiệu khóa học"}
                 </h3>
                 <p className="mt-2 text-sm text-stone-600">
                   {view.desc || "Tận mắt xem cách giảng viên đồng hành, bài giảng được trình bày ra sao trước khi quyết định."}
                 </p>
                 <div className="mt-4 aspect-video overflow-hidden rounded-2xl border border-stone-200 bg-stone-50">
-                  {view.previewLesson?.video_url ? (
+                  {previewLesson?.video_url ? (
                     <video
                       controls
                       poster={view.image || undefined}
-                      src={view.previewLesson.video_url}
+                      src={previewLesson.video_url}
                       className="h-full w-full object-cover"
                     />
                   ) : (
@@ -280,41 +466,103 @@ export default function CourseDetail() {
               <div className="flex items-center justify-between">
                 <h3 className="text-2xl font-bold text-stone-900">Nội dung khóa học</h3>
                 <span className="text-sm text-stone-500">
-                  {view.stats.moduleCount} chương · {view.stats.totalLessons} bài học
+                  {moduleCount} chương · {totalLessons} bài học · {totalDurationLabel || "Đang cập nhật"}
                 </span>
               </div>
+              {syllabusLoading && (
+                <div className="mt-4 rounded-2xl border border-dashed border-primary-200 bg-primary-50/40 px-4 py-3 text-sm text-primary-700">
+                  Đang tải nội dung và cấu trúc bài giảng...
+                </div>
+              )}
+              {syllabusError && (
+                <p className="mt-3 text-sm text-red-600">{syllabusError}</p>
+              )}
               <div className="mt-6 space-y-4">
-                {view.modules.map((m, idx) => (
-                  <div key={m.id ?? idx} className="rounded-2xl border border-stone-100 bg-stone-50/80 p-4">
-                    <div className="flex items-center justify-between gap-4">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-primary-600">
-                          Chương {idx + 1}
-                        </p>
-                        <h4 className="text-lg font-semibold text-stone-900">{m.title || `Chương ${idx + 1}`}</h4>
+                {modulesForDisplay.map((module, idx) => {
+                  const lessons = Array.isArray(module.lessons) ? module.lessons : [];
+                  const moduleDurationLabel =
+                    secondsToLabel(module.durationSeconds) ||
+                    secondsToLabel(lessons.reduce((sum, lesson) => sum + extractLessonDurationSeconds(lesson), 0)) ||
+                    null;
+                  return (
+                    <div key={module.id ?? idx} className="rounded-2xl border border-stone-100 bg-white/90 p-4 shadow-sm">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-primary-600">
+                            Chương {idx + 1}
+                          </p>
+                          <h4 className="text-lg font-semibold text-stone-900">{module.title || `Chương ${idx + 1}`}</h4>
+                          {module.description && (
+                            <p className="mt-1 text-sm text-stone-500">{stripHtmlTags(module.description)}</p>
+                          )}
+                        </div>
+                        <span className="text-xs font-semibold text-stone-500">
+                          {lessons.length} bài · {moduleDurationLabel || "Đang cập nhật"}
+                        </span>
                       </div>
-                      <span className="text-sm text-stone-500">
-                        {(m.lessons && m.lessons.length) || 0} bài học
-                      </span>
+                      {lessons.length > 0 ? (
+                        <ul className="mt-4 space-y-3">
+                          {lessons.map((lesson, lessonIdx) => (
+                            <li
+                              key={lesson.id ?? `${module.id}-${lessonIdx}`}
+                              className="flex flex-col gap-2 rounded-2xl border border-stone-100 bg-stone-50/80 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+                            >
+                              <div className="flex items-start gap-3">
+                                <span className="mt-0.5 rounded-full bg-primary-100 px-2 py-1 text-xs font-semibold text-primary-700">
+                                  {String(lessonIdx + 1).padStart(2, "0")}
+                                </span>
+                                <div>
+                                  <p className="font-semibold leading-snug text-stone-900">
+                                    {lesson.title || `Bài ${lessonIdx + 1}`}
+                                  </p>
+                                  {lesson.description ? (
+                                    <p className="text-xs text-stone-500">{lesson.description}</p>
+                                  ) : lesson.content ? (
+                                    <p className="text-xs text-stone-500">{lesson.content}</p>
+                                  ) : null}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 text-xs font-semibold text-stone-500">
+                                {lesson.durationLabel && (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1 shadow-sm">
+                                    <svg
+                                      viewBox="0 0 24 24"
+                                      className="h-3.5 w-3.5 text-primary-600"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2"
+                                    >
+                                      <circle cx="12" cy="12" r="9" />
+                                      <path d="M12 7v5l3 3" />
+                                    </svg>
+                                    {lesson.durationLabel}
+                                  </span>
+                                )}
+                                {lesson.video_url && (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-primary-50 px-3 py-1 text-primary-600">
+                                    <svg
+                                      viewBox="0 0 24 24"
+                                      className="h-3.5 w-3.5"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2"
+                                    >
+                                      <path d="M8 5v14l11-7z" />
+                                    </svg>
+                                    Video
+                                  </span>
+                                )}
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="mt-3 text-sm text-stone-500">Chương này đang cập nhật bài học.</p>
+                      )}
                     </div>
-                    {Array.isArray(m.lessons) && m.lessons.length > 0 && (
-                      <ul className="mt-3 space-y-2 text-sm text-stone-600">
-                        {m.lessons.slice(0, 5).map((lesson, lIdx) => (
-                          <li key={lesson.id ?? lIdx} className="flex items-center gap-2">
-                            <span className="h-1.5 w-1.5 rounded-full bg-primary-500" />
-                            <span>{lesson.title || `Bài ${lIdx + 1}`}</span>
-                          </li>
-                        ))}
-                        {m.lessons.length > 5 && (
-                          <li className="text-xs italic text-stone-400">
-                            +{m.lessons.length - 5} bài học khác
-                          </li>
-                        )}
-                      </ul>
-                    )}
-                  </div>
-                ))}
-                {(!view.modules || view.modules.length === 0) && (
+                  );
+                })}
+                {modulesForDisplay.length === 0 && !syllabusLoading && (
                   <p className="text-sm text-stone-500">Nội dung khóa học đang được cập nhật.</p>
                 )}
               </div>
@@ -330,9 +578,12 @@ export default function CourseDetail() {
               </p>
 
               {isFreeCourse ? (
-                <button className="btn btn-primary mt-6 w-full" onClick={handleStartCourse}>
-                  Đăng ký học ngay
-                </button>
+                <>
+                  <button className="btn btn-primary mt-6 w-full" onClick={handleFreeEnroll} disabled={enrolling}>
+                    {enrolling ? "Đang ghi danh..." : enrolled ? "Vào học ngay" : "Đăng ký học ngay"}
+                  </button>
+                  {enrollError && <p className="mt-2 text-sm text-red-600">{enrollError}</p>}
+                </>
               ) : (
                 <>
                   <button className="btn btn-primary mt-6 w-full" onClick={handleCheckout}>
@@ -354,7 +605,7 @@ export default function CourseDetail() {
                 </li>
                 <li className="flex items-center gap-2">
                   <span className="text-primary-600">•</span>
-                  Tổng {view.stats.totalLessons || "—"} bài học · {view.stats.totalDurationLabel || "Đang cập nhật"}
+                  Tổng {totalLessons || "—"} bài học · {totalDurationLabel || "Đang cập nhật"}
                 </li>
                 <li className="flex items-center gap-2">
                   <span className="text-primary-600">•</span>

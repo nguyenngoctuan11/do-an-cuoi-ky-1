@@ -1,15 +1,16 @@
-package com.example_back_end.controller;
+package com.example.back_end.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.Map;
+import java.util.SortedMap;
+import java.util.TreeMap;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
-import org.springframework.beans.factory.annotation.Value;
 
 @RestController
 @RequestMapping("/api/payments")
@@ -20,7 +21,6 @@ public class PaymentsIpnControllers {
 
     @GetMapping("/vnpay/ipn")
     public ResponseEntity<String> vnpayIpn(HttpServletRequest req) {
-        // Collect vnp_* params
         SortedMap<String,String> params = new TreeMap<>();
         String secureHash = null;
         for (Map.Entry<String, String[]> entry : req.getParameterMap().entrySet()) {
@@ -37,7 +37,6 @@ public class PaymentsIpnControllers {
         String data = buildQuery(params);
         String hash = hmacSHA512(vnpHashSecret, data);
         if (secureHash != null && secureHash.equalsIgnoreCase(hash)) {
-            // vnp_ResponseCode == "00" -> PAID. Ở đây chỉ trả OK.
             return ResponseEntity.ok("OK");
         }
         return ResponseEntity.badRequest().body("INVALID_SIGNATURE");
@@ -45,7 +44,6 @@ public class PaymentsIpnControllers {
 
     @PostMapping("/momo/ipn")
     public ResponseEntity<String> momoIpn(@RequestBody Map<String,Object> body) {
-        // Verify signature
         String partnerCode = str(body.get("partnerCode"));
         String accessKey   = str(body.get("accessKey"));
         String amount      = str(body.get("amount"));
@@ -103,4 +101,3 @@ public class PaymentsIpnControllers {
             return sb.toString();
         }catch(Exception e){ throw new RuntimeException(e);} }
 }
-

@@ -115,6 +115,13 @@ public class TeacherQuizController {
     @Transactional
     public ResponseEntity<Void> delete(@PathVariable Long quizId, Authentication auth){
         requireQuiz(quizId, auth);
+        em.createNativeQuery(
+                        "UPDATE dbo.course_certificates SET attempt_id = NULL WHERE attempt_id IN (SELECT id FROM dbo.quiz_attempts WHERE quiz_id = :qid)")
+                .setParameter("qid", quizId)
+                .executeUpdate();
+        em.createNativeQuery("DELETE FROM dbo.quiz_attempts WHERE quiz_id = :qid")
+                .setParameter("qid", quizId)
+                .executeUpdate();
         em.createNativeQuery("DELETE FROM dbo.quizzes WHERE id=:id")
                 .setParameter("id", quizId)
                 .executeUpdate();

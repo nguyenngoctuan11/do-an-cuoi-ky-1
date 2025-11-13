@@ -39,11 +39,13 @@ public interface CourseRepository extends JpaRepository<Course, Long> {
             "    ORDER BY a.id) AS previewVideoUrl\n" +
             "FROM dbo.courses c\n" +
             "WHERE (:status IS NULL OR c.status = :status)\n" +
+            "  AND (:keyword IS NULL OR c.title LIKE N'%' + :keyword + '%' OR c.slug LIKE N'%' + :keyword + '%')\n" +
             "ORDER BY c.created_at DESC\n" +
             "OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY\n", nativeQuery = true)
     List<CourseCardProjection> findCourseCards(@Param("status") String status,
                                                @Param("offset") int offset,
-                                               @Param("limit") int limit);
+                                               @Param("limit") int limit,
+                                               @Param("keyword") String keyword);
 
     // Phiên bản trả tên cột đúng T-SQL (snake_case)
     @Query(value = "\n" +
@@ -60,11 +62,13 @@ public interface CourseRepository extends JpaRepository<Course, Long> {
             "    ORDER BY a.id) AS preview_video_url\n" +
             "FROM dbo.courses c\n" +
             "WHERE (:status IS NULL OR c.status = :status)\n" +
+            "  AND (:keyword IS NULL OR c.title LIKE N'%' + :keyword + '%' OR c.slug LIKE N'%' + :keyword + '%')\n" +
             "ORDER BY c.created_at DESC\n" +
             "OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY\n", nativeQuery = true)
     List<CourseCardSqlProjection> findCourseCardsSql(@Param("status") String status,
                                                      @Param("offset") int offset,
-                                                     @Param("limit") int limit);
+                                                     @Param("limit") int limit,
+                                                     @Param("keyword") String keyword);
 
     @Query(value = "\n" +
             "SELECT c.id, c.title, c.slug, c.status, c.approval_status AS approvalStatus,\n" +

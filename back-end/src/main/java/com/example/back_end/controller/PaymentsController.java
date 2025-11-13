@@ -1,6 +1,6 @@
-package com.example_back_end.controller;
+package com.example.back_end.controller;
 
-import com.example_back_end.service.PaymentGatewayService;
+import com.example.back_end.service.PaymentGatewayService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;

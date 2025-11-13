@@ -5,10 +5,76 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Chi tiết khóa học (Duyệt)</title>
   <link rel="stylesheet" href="/app/app.css"/>
+  <style>
+    .lesson-preview {
+      margin-top: 8px;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      overflow: hidden;
+      background: rgba(255,255,255,0.03);
+    }
+    .lesson-preview video,
+    .lesson-preview iframe {
+      width: 100%;
+      height: 320px;
+      display: block;
+    }
+    .lesson-desc {
+      margin-top: 8px;
+      font-size: 14px;
+      color: rgba(255,255,255,0.85);
+    }
+  </style>
   <script type="module">
     import {mountNav, mountAdminMenu, mountAdminUser, api, qs, requireAuth} from '/app/app-common.js';
     const el = id => document.getElementById(id);
     const id = Number(qs('id'));
+    const normalizeVideoUrl = (url) => {
+      if(!url) return null;
+      const trimmed = String(url).trim();
+      if(trimmed.includes("youtube.com") || trimmed.includes("youtu.be")){
+        let id = trimmed;
+        if(trimmed.includes("watch?v=")){
+          id = trimmed.split("watch?v=")[1]?.split("&")[0];
+        }else if(trimmed.includes("youtu.be/")){
+          id = trimmed.split("youtu.be/")[1]?.split("?")[0];
+        }
+        return { type: "youtube", url: `https://www.youtube.com/embed/${id}` };
+      }
+      return { type: "video", url: trimmed };
+    };
+
+    const renderLessonMedia = (lesson) => {
+      const src = normalizeVideoUrl(lesson.video_url);
+      if(!src) return "";
+      if(src.type === "youtube"){
+        return `
+          <div class="lesson-preview">
+            <iframe src="${src.url}" title="${lesson.title || "Lesson video"}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+          </div>`;
+      }
+      return `
+        <div class="lesson-preview">
+          <video controls src="${src.url}"></video>
+        </div>`;
+    };
+
+    const renderLessonRows = (lessons = []) => lessons.map((l) => {
+      const media = renderLessonMedia(l);
+      const desc = l.long_desc || l.description || "";
+      return `
+        <tr>
+          <td>${l.title}</td>
+          <td>${l.type || ""}</td>
+          <td>${l.duration_seconds ? Math.floor(l.duration_seconds / 60) + ":" + String(l.duration_seconds % 60).padStart(2, "0") : ""}</td>
+          <td>${l.status || ""}</td>
+        </tr>
+        ${(media || desc) ? `<tr><td colspan="4">
+            ${media || ""}
+            ${desc ? `<div class="lesson-desc">${desc}</div>` : ""}
+        </td></tr>` : ""}`;
+    }).join("");
+
     async function load(){
       if(!requireAuth(['MANAGER'])) return;
       const d = await api(`/api/manager/courses/${id}/detail-sql`);
@@ -22,13 +88,7 @@
           <table>
             <thead><tr><th>Bài học</th><th>Loại</th><th>Thời lượng</th><th>Trạng thái</th></tr></thead>
             <tbody>
-              ${(m.lessons||[]).map(l => `
-                <tr>
-                  <td>${l.title}</td>
-                  <td>${l.type||''}</td>
-                  <td>${l.duration_seconds? Math.floor(l.duration_seconds/60)+':'+String(l.duration_seconds%60).padStart(2,'0'):''}</td>
-                  <td>${l.status||''}</td>
-                </tr>`).join('')}
+              ${renderLessonRows(m.lessons || [])}
             </tbody>
           </table>
         </div>`).join('') || '<div class="empty">Chưa có module nào</div>';

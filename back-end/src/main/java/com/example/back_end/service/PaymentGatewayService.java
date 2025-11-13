@@ -1,4 +1,4 @@
-package com.example_back_end.service;
+package com.example.back_end.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -11,13 +11,21 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.util.*;
+import java.util.Date;
+import java.util.Map;
+import java.util.SortedMap;
+import java.util.TreeMap;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
 @Service
 public class PaymentGatewayService {
+
+    private static final String DEFAULT_VNP_TMNCODE = "2QXUI4J4";
+    private static final String DEFAULT_VNP_HASH_SECRET = "SECRETKEY123456789";
+    private static final String DEFAULT_MOMO_PARTNER = "MOMO";
+    private static final String DEFAULT_MOMO_ACCESS = "F8BBA842ECF85";
+    private static final String DEFAULT_MOMO_SECRET = "K951B6PE1waDMi640xX08PD3vg6EkVlz";
 
     @Value("${payments.vnpay.tmn_code:}") private String vnpTmnCode;
     @Value("${payments.vnpay.hash_secret:}") private String vnpHashSecret;
@@ -35,13 +43,13 @@ public class PaymentGatewayService {
     private final ObjectMapper om = new ObjectMapper();
 
     public String createVnpayUrl(String orderId, long amountVnd, String orderInfo, String clientIp) {
-        if (isBlank(vnpTmnCode) || isBlank(vnpHashSecret))
-            throw new IllegalStateException("VNPay not configured: tmn_code/hash_secret missing");
+        String tmnCode = resolvedVnpTmnCode();
+        String hashSecret = resolvedVnpHashSecret();
 
         SortedMap<String, String> params = new TreeMap<>();
         params.put("vnp_Version", "2.1.0");
         params.put("vnp_Command", "pay");
-        params.put("vnp_TmnCode", vnpTmnCode);
+        params.put("vnp_TmnCode", tmnCode);
         params.put("vnp_Amount", String.valueOf(amountVnd * 100));
         params.put("vnp_CurrCode", "VND");
         params.put("vnp_TxnRef", orderId);
@@ -55,18 +63,19 @@ public class PaymentGatewayService {
         params.put("vnp_IpnUrl", vnpIpnUrl);
 
         String query = buildQuery(params);
-        String secureHash = hmacSHA512(vnpHashSecret, query);
+        String secureHash = hmacSHA512(hashSecret, query);
         return vnpPayUrl + "?" + query + "&vnp_SecureHash=" + secureHash;
     }
 
     public String createMomoUrl(String orderId, long amountVnd, String orderInfo) throws Exception {
-        if (isBlank(momoPartner) || isBlank(momoAccess) || isBlank(momoSecret))
-            throw new IllegalStateException("MoMo not configured: partner/access/secret missing");
+        String partner = resolvedMomoPartner();
+        String access = resolvedMomoAccess();
+        String secret = resolvedMomoSecret();
 
         String requestId = String.valueOf(System.currentTimeMillis());
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("partnerCode", momoPartner);
-        payload.put("accessKey", momoAccess);
+        Map<String, Object> payload = new java.util.LinkedHashMap<>();
+        payload.put("partnerCode", partner);
+        payload.put("accessKey", access);
         payload.put("requestId", requestId);
         payload.put("amount", String.valueOf(amountVnd));
         payload.put("orderId", orderId);
@@ -76,17 +85,17 @@ public class PaymentGatewayService {
         payload.put("requestType", "captureWallet");
         payload.put("extraData", "");
 
-        String raw = "accessKey=" + momoAccess
+        String raw = "accessKey=" + access
                 + "&amount=" + amountVnd
                 + "&extraData="
                 + "&ipnUrl=" + momoIpnUrl
                 + "&orderId=" + orderId
                 + "&orderInfo=" + orderInfo
-                + "&partnerCode=" + momoPartner
+                + "&partnerCode=" + partner
                 + "&redirectUrl=" + momoRedirectUrl
                 + "&requestId=" + requestId
                 + "&requestType=captureWallet";
-        String signature = hmacSHA256(momoSecret, raw);
+        String signature = hmacSHA256(secret, raw);
         payload.put("signature", signature);
 
         HttpClient http = HttpClient.newHttpClient();
@@ -99,6 +108,26 @@ public class PaymentGatewayService {
         JsonNode j = om.readTree(resp.body());
         if (j.has("payUrl")) return j.get("payUrl").asText();
         throw new IllegalStateException("MoMo create failed: " + resp.body());
+    }
+
+    private String resolvedVnpTmnCode() {
+        return isBlank(vnpTmnCode) ? DEFAULT_VNP_TMNCODE : vnpTmnCode;
+    }
+
+    private String resolvedVnpHashSecret() {
+        return isBlank(vnpHashSecret) ? DEFAULT_VNP_HASH_SECRET : vnpHashSecret;
+    }
+
+    private String resolvedMomoPartner() {
+        return isBlank(momoPartner) ? DEFAULT_MOMO_PARTNER : momoPartner;
+    }
+
+    private String resolvedMomoAccess() {
+        return isBlank(momoAccess) ? DEFAULT_MOMO_ACCESS : momoAccess;
+    }
+
+    private String resolvedMomoSecret() {
+        return isBlank(momoSecret) ? DEFAULT_MOMO_SECRET : momoSecret;
     }
 
     private static String buildQuery(SortedMap<String, String> params) {
@@ -136,4 +165,3 @@ public class PaymentGatewayService {
 
     private static boolean isBlank(String s){ return s==null || s.isBlank(); }
 }
-

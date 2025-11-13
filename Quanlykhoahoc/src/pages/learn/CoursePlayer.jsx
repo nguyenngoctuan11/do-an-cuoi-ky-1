@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
-import { useOutletContext, useParams } from "react-router-dom";
+﻿import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import { useOutletContext, useParams, useNavigate } from "react-router-dom";
 import LessonSidebar from "../../components/LessonSidebar";
 import httpClient, { API_BASE_URL } from "../../api/httpClient";
 
@@ -38,6 +38,7 @@ function ContentTabs({ active, setActive }) {
 
 export default function CoursePlayer() {
   const { courseId } = useParams();
+  const navigate = useNavigate();
   const { progress, refreshProgress } = useOutletContext() || {};
   const [modules, setModules] = useState([]);
   const [current, setCurrent] = useState(null);
@@ -45,9 +46,38 @@ export default function CoursePlayer() {
   const [videoUnlocked, setVideoUnlocked] = useState(true);
   const [navigating, setNavigating] = useState(false);
   const pendingCompleteRef = useRef(new Set());
+  const [exams, setExams] = useState([]);
+  const [loadingExams, setLoadingExams] = useState(false);
+  const videoElementRef = useRef(null);
+  const allowedSeekRef = useRef(0);
 
   const completedLessonIds = progress?.completedLessonIds || [];
-  const completedSet = useMemo(() => new Set(completedLessonIds), [completedLessonIds]);
+  const [localCompleted, setLocalCompleted] = useState(() => new Set(completedLessonIds));
+
+  useEffect(() => {
+    setLocalCompleted(new Set(completedLessonIds));
+  }, [completedLessonIds]);
+
+  const completedSet = useMemo(() => localCompleted, [localCompleted]);
+
+  const resolveVideoSource = useCallback((url) => {
+    if (!url) return { type: "none", url: null };
+    const normalized = url.trim();
+    const lower = normalized.toLowerCase();
+    if (lower.includes("youtube.com") || lower.includes("youtu.be")) {
+      let embed = normalized;
+      if (lower.includes("watch?v=")) {
+        const idPart = normalized.split("watch?v=")[1]?.split("&")[0];
+        if (idPart) embed = `https://www.youtube.com/embed/${idPart}`;
+      } else if (lower.includes("youtu.be/")) {
+        const idPart = normalized.split("youtu.be/")[1]?.split("?")[0];
+        if (idPart) embed = `https://www.youtube.com/embed/${idPart}`;
+      }
+      return { type: "youtube", url: embed };
+    }
+    const absolute = normalized.startsWith("/") ? `${API_BASE_URL}${normalized}` : normalized;
+    return { type: "video", url: absolute };
+  }, []);
 
   useEffect(() => {
     if (!courseId) return;
@@ -83,12 +113,27 @@ export default function CoursePlayer() {
   }, [flatLessons, current]);
 
   useEffect(() => {
+    if (!courseId) return;
+    setLoadingExams(true);
+    httpClient
+      .get(`/api/student/exams/courses/${courseId}`)
+      .then(({ data }) => {
+        setExams(Array.isArray(data) ? data : []);
+      })
+      .catch((err) => {
+        console.error("Load exams failed", err);
+        setExams([]);
+      })
+      .finally(() => setLoadingExams(false));
+  }, [courseId]);
+
+  useEffect(() => {
     if (!current) {
       setVideoUnlocked(true);
       return;
     }
     const completed = completedSet.has(current.id);
-    const isVideo = Boolean(current.video_url);
+    const isVideo = resolveVideoSource(current.video_url).type !== "none";
     setVideoUnlocked(!isVideo || completed);
   }, [current, completedSet]);
 
@@ -103,6 +148,11 @@ export default function CoursePlayer() {
       try {
         await httpClient.post(`/api/student/progress/lessons/${lesson.id}/complete`);
         onSuccess?.();
+        setLocalCompleted((prev) => {
+          const next = new Set(prev);
+          next.add(lesson.id);
+          return next;
+        });
         await refreshProgress?.();
         return true;
       } catch (err) {
@@ -123,7 +173,10 @@ export default function CoursePlayer() {
     if (!current?.video_url) return;
     if (completedSet.has(current.id)) return;
     const video = event.currentTarget;
+    videoElementRef.current = video;
     const duration = video.duration || 0;
+    const currentTime = video.currentTime || 0;
+    allowedSeekRef.current = Math.max(allowedSeekRef.current, currentTime + 15);
     if (!duration) return;
     if (video.currentTime / duration >= 0.97) {
       await markLessonComplete(current, {
@@ -133,8 +186,23 @@ export default function CoursePlayer() {
     }
   };
 
+  const handleVideoSeeking = (event) => {
+    const video = event.currentTarget;
+    if (video.currentTime > allowedSeekRef.current) {
+      video.currentTime = allowedSeekRef.current;
+    }
+  };
+
   const handleVideoEnded = async () => {
     if (!current?.video_url) return;
+    await markLessonComplete(current, {
+      silent: true,
+      onSuccess: () => setVideoUnlocked(true),
+    });
+  };
+
+  const handleManualComplete = async () => {
+    if (!current || completedSet.has(current.id)) return;
     await markLessonComplete(current, {
       silent: true,
       onSuccess: () => setVideoUnlocked(true),
@@ -148,7 +216,7 @@ export default function CoursePlayer() {
 
   const goNext = async () => {
     if (!current || navigating) return;
-    const isVideo = Boolean(current.video_url);
+    const isVideo = resolveVideoSource(current.video_url).type !== "none";
     if (isVideo && !(completedSet.has(current.id) || videoUnlocked)) return;
     try {
       setNavigating(true);
@@ -163,28 +231,119 @@ export default function CoursePlayer() {
     }
   };
 
-  const video = current?.video_url;
+  const videoSource = resolveVideoSource(current?.video_url);
   const lessonCompleted = current ? completedSet.has(current.id) : false;
-  const disableNext = Boolean(video) && !lessonCompleted && !videoUnlocked;
+  const disableNext = videoSource.type !== "none" && !lessonCompleted && !videoUnlocked;
+  const totalLessons = progress?.totalLessons ?? flatLessons.length;
+  const completedLessons = completedSet.size || progress?.completedLessons || 0;
+  const completionPercent = totalLessons ? Math.round((completedLessons / totalLessons) * 100) : 0;
+  const canShowExams = completionPercent >= 100 && exams.length > 0;
+  const lessonIndex = flatLessons.findIndex((l) => l.id === current?.id);
+  const canFastForward = lessonIndex <= 1;
+
+  useEffect(() => {
+    allowedSeekRef.current = lessonIndex <= 1 ? Number.MAX_SAFE_INTEGER : 0;
+    if (videoElementRef.current) {
+      videoElementRef.current.currentTime = 0;
+    }
+  }, [current?.id, lessonIndex]);
+
+  const canAccessLesson = (lessonId) => {
+    if (!lessonId) return false;
+    const idx = flatLessons.findIndex((l) => l.id === lessonId);
+    if (idx <= 0) return true;
+    for (let i = 0; i < idx; i += 1) {
+      if (!completedSet.has(flatLessons[i].id)) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const handleSelectLesson = (lesson) => {
+    if (!lesson?.id) return;
+    if (!canAccessLesson(lesson.id)) {
+      alert("Bạn cần hoàn thành bài trước đó trước khi mở bài này.");
+      return;
+    }
+    setCurrent(lesson);
+  };
+
+  const goToExam = (examId) => {
+    navigate(`/courses/${courseId}/exams/${examId}`);
+  };
+
+  const formatExamMeta = (exam) => {
+    const minutes = exam?.timeLimitSec ? Math.round(exam.timeLimitSec / 60) : null;
+    const timeLabel = minutes ? `${minutes} phút` : "Không giới hạn";
+    return `${exam?.questionCount ?? 0} câu • ${timeLabel}`;
+  };
 
   return (
     <div className="grid md:grid-cols-[1fr_320px] gap-6">
       <div>
         <PlayerHeader lesson={current} />
-        {video ? (
+        <div className="mb-6 rounded-xl border border-stone-200 bg-white p-4 shadow-sm flex flex-wrap items-center gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.3em] text-stone-400">Tiến độ khóa học</p>
+            <p className="text-2xl font-semibold text-stone-900">
+              {completedLessons}/{totalLessons} bài ({completionPercent}%)
+            </p>
+          </div>
+          <div className="flex-1 h-2 rounded-full bg-stone-100">
+            <div className="h-full rounded-full bg-primary-600 transition-all" style={{ width: `${Math.min(100, completionPercent)}%` }} />
+          </div>
+          <div className="text-sm text-primary-700 font-medium">
+            {completionPercent >= 100 ? "Bạn đã hoàn thành toàn bộ khóa học!" : "Tiếp tục học để mở bài kiểm tra."}
+          </div>
+        </div>
+        {canShowExams && (
+          <div className="mb-6 border border-primary-100 bg-primary-50 rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm text-primary-600 font-semibold uppercase">Bài kiểm tra</p>
+                <p className="text-stone-800">Hoàn thành bài kiểm tra để nhận chứng chỉ</p>
+              </div>
+              {loadingExams && <span className="text-xs text-stone-500">Đang tải...</span>}
+            </div>
+            <div className="space-y-2">
+              {exams.map((exam) => (
+                <div key={exam.id} className="flex flex-wrap items-center justify-between gap-3 bg-white rounded-lg px-4 py-3 shadow-sm border border-primary-100">
+                  <div>
+                    <p className="font-medium text-stone-900">{exam.title || `Bài kiểm tra #${exam.id}`}</p>
+                    <p className="text-sm text-stone-500">{formatExamMeta(exam)}</p>
+                  </div>
+                  <button onClick={() => goToExam(exam.id)} className="btn btn-primary">
+                    Làm bài
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {videoSource.type === "video" ? (
           <video
-            src={video}
+            src={videoSource.url}
             controls
             className="aspect-video w-full rounded-xl bg-black"
             onTimeUpdate={handleVideoProgress}
             onEnded={handleVideoEnded}
           />
+        ) : videoSource.type === "youtube" ? (
+          <div className="aspect-video w-full overflow-hidden rounded-xl bg-black">
+            <iframe
+              src={videoSource.url}
+              title={current?.title || "Lesson video"}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              className="h-full w-full border-0"
+            />
+          </div>
         ) : (
           <div className="aspect-video rounded-xl bg-gradient-to-br from-primary-200 to-primary-100 flex items-center justify-center text-stone-500">
-            Chưa có video cho bài học này
+            Ch??a cA3 video cho bA?i h???c nA?y
           </div>
-        )}
-        <div className="mt-4">
+        )}\r\n        <div className="mt-4">
           <ContentTabs active={tab} setActive={setTab} />
           <div className="mt-4 text-sm text-stone-700">
             {tab === "video" && <p>Nội dung tóm tắt bài học, ghi chú quan trọng và liên kết hữu ích.</p>}
@@ -218,13 +377,20 @@ export default function CoursePlayer() {
               Bài tiếp theo
             </button>
           </div>
-          {video && !lessonCompleted && !videoUnlocked && (
-            <p className="text-xs text-stone-500">Hãy xem hết video để mở khóa bài tiếp theo.</p>
+          {videoSource.type !== "none" && !lessonCompleted && !videoUnlocked && (
+            <div className="flex flex-col gap-1 text-xs text-stone-500">
+              <span>Hãy xem hết video để mở bài tiếp theo.</span>
+              {videoSource.type === "youtube" && (
+                <button onClick={handleManualComplete} className="btn btn-xs border-stone-300 text-stone-600">
+                  Đánh dấu đã xem
+                </button>
+              )}
+            </div>
           )}
         </div>
 
         <div className="mt-4 text-sm text-stone-600">
-          Tiến độ khóa học: {progress?.completedLessons ?? 0}/{progress?.totalLessons ?? flatLessons.length} bài
+          Tiến độ khóa học: {completedLessons}/{totalLessons} bài
         </div>
       </div>
 
@@ -232,8 +398,21 @@ export default function CoursePlayer() {
         modules={modules}
         activeLessonId={current?.id}
         completedLessonIds={completedLessonIds}
-        onSelect={(l) => setCurrent(l)}
+        onSelect={handleSelectLesson}
       />
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+

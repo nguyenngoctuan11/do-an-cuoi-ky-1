@@ -1,4 +1,4 @@
-package com.example_back_end.config;
+package com.example.back_end.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.core.annotation.Order;
@@ -22,4 +22,3 @@ public class SecurityPaymentsPermitConfig {
         return http.build();
     }
 }
-
