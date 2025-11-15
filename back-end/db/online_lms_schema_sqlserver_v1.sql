@@ -620,6 +620,75 @@ CREATE TABLE dbo.payments (
 CREATE INDEX idx_payments_order ON dbo.payments(order_id);
 CREATE INDEX idx_payments_provider ON dbo.payments(provider, provider_txn_id);
 
+-- =======================
+-- Support Chat & Ratings
+-- =======================
+
+CREATE TABLE dbo.support_threads (
+  id BIGINT IDENTITY(1,1) PRIMARY KEY,
+  student_id BIGINT NOT NULL,
+  manager_id BIGINT NULL,
+  course_id BIGINT NULL,
+  topic NVARCHAR(64) NOT NULL,
+  subject NVARCHAR(255) NULL,
+  origin NVARCHAR(64) NULL,
+  status NVARCHAR(32) NOT NULL CONSTRAINT df_support_threads_status DEFAULT N'new',
+  priority NVARCHAR(16) NULL,
+  channel NVARCHAR(32) NULL,
+  metadata NVARCHAR(MAX) NULL,
+  last_message_preview NVARCHAR(512) NULL,
+  last_message_at DATETIME2 NULL,
+  last_sender NVARCHAR(16) NULL,
+  last_student_activity_at DATETIME2 NULL,
+  last_manager_activity_at DATETIME2 NULL,
+  has_unread_for_student BIT NOT NULL CONSTRAINT df_support_threads_unread_student DEFAULT 0,
+  has_unread_for_manager BIT NOT NULL CONSTRAINT df_support_threads_unread_manager DEFAULT 1,
+  created_at DATETIME2 NOT NULL CONSTRAINT df_support_threads_created DEFAULT GETUTCDATE(),
+  updated_at DATETIME2 NOT NULL CONSTRAINT df_support_threads_updated DEFAULT GETUTCDATE(),
+  closed_at DATETIME2 NULL,
+  CONSTRAINT fk_support_threads_student FOREIGN KEY (student_id) REFERENCES dbo.users(id),
+  CONSTRAINT fk_support_threads_manager FOREIGN KEY (manager_id) REFERENCES dbo.users(id),
+  CONSTRAINT fk_support_threads_course FOREIGN KEY (course_id) REFERENCES dbo.courses(id),
+  CONSTRAINT ck_support_threads_status CHECK (status IN (N'new', N'in_progress', N'waiting_student', N'closed'))
+);
+
+CREATE INDEX ix_support_threads_status_created ON dbo.support_threads(status, created_at);
+CREATE INDEX ix_support_threads_manager_status ON dbo.support_threads(manager_id, status) WHERE manager_id IS NOT NULL;
+CREATE INDEX ix_support_threads_student_status ON dbo.support_threads(student_id, status);
+
+CREATE TABLE dbo.support_messages (
+  id BIGINT IDENTITY(1,1) PRIMARY KEY,
+  thread_id BIGINT NOT NULL,
+  sender_id BIGINT NULL,
+  sender_type NVARCHAR(16) NOT NULL,
+  content NVARCHAR(MAX) NOT NULL,
+  created_at DATETIME2 NOT NULL CONSTRAINT df_support_messages_created DEFAULT GETUTCDATE(),
+  CONSTRAINT fk_support_messages_thread FOREIGN KEY (thread_id) REFERENCES dbo.support_threads(id) ON DELETE CASCADE,
+  CONSTRAINT fk_support_messages_sender FOREIGN KEY (sender_id) REFERENCES dbo.users(id),
+  CONSTRAINT ck_support_messages_sender_type CHECK (sender_type IN (N'student', N'manager', N'system', N'bot'))
+);
+
+CREATE TABLE dbo.support_message_attachments (
+  message_id BIGINT NOT NULL,
+  attachment_url NVARCHAR(1024) NOT NULL,
+  PRIMARY KEY (message_id, attachment_url),
+  CONSTRAINT fk_support_msg_attachments_message FOREIGN KEY (message_id) REFERENCES dbo.support_messages(id) ON DELETE CASCADE
+);
+
+CREATE INDEX ix_support_messages_thread ON dbo.support_messages(thread_id, id);
+
+CREATE TABLE dbo.support_ratings (
+  id BIGINT IDENTITY(1,1) PRIMARY KEY,
+  thread_id BIGINT NOT NULL UNIQUE,
+  student_id BIGINT NOT NULL,
+  rating TINYINT NOT NULL,
+  comment NVARCHAR(1000) NULL,
+  created_at DATETIME2 NOT NULL CONSTRAINT df_support_ratings_created DEFAULT GETUTCDATE(),
+  CONSTRAINT fk_support_ratings_thread FOREIGN KEY (thread_id) REFERENCES dbo.support_threads(id) ON DELETE CASCADE,
+  CONSTRAINT fk_support_ratings_student FOREIGN KEY (student_id) REFERENCES dbo.users(id),
+  CONSTRAINT ck_support_ratings_value CHECK (rating BETWEEN 1 AND 5)
+);
+
 -- Helpful indexes
 CREATE INDEX idx_courses_status_publish ON dbo.courses(status, publish_at);
 CREATE INDEX idx_lessons_module_sort ON dbo.lessons(module_id, sort_order);

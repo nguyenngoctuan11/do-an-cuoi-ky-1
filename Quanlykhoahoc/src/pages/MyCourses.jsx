@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
+import { useSupportChat } from "../context/SupportChatContext";
 
 function ActionButton({ onClick, children }) {
   return (
@@ -13,6 +14,7 @@ export default function MyCourses() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
+  const { setEntryContext } = useSupportChat();
 
   const authHeaders = () => {
     const token = localStorage.getItem("token");
@@ -29,6 +31,10 @@ export default function MyCourses() {
   }, [API]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    setEntryContext((prev) => ({ ...(prev || {}), origin: "my_courses" }));
+    return () => setEntryContext((prev) => (prev?.origin === "my_courses" ? null : prev));
+  }, [setEntryContext]);
 
   const submitReview = async (id) => {
     await fetch(`${API}/api/teacher/courses/${id}/submit`, { method: "POST", headers: { "Content-Type": "application/json", ...authHeaders() } });
@@ -39,6 +45,8 @@ export default function MyCourses() {
     await fetch(`${API}/api/teacher/courses/${id}`, { method: "DELETE", headers: { ...authHeaders() } });
     load();
   };
+
+
 
   const editHref = (id) => `${API}/app/admin/teacher-new-course.html?id=${id}`;
   const createHref = `${API}/app/admin/teacher-new-course.html`;

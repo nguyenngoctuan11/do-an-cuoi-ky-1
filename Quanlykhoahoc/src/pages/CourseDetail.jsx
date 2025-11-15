@@ -5,6 +5,7 @@ import SectionHeading from "../components/SectionHeading";
 import { normalizePriceValue, resolveIsFree } from "../utils/price";
 import httpClient from "../api/httpClient";
 import { useAuth } from "../context/AuthContext";
+import { useSupportChat } from "../context/SupportChatContext";
 
 const API_BASE = process.env.REACT_APP_API_BASE || "";
 const moneyFormatter = new Intl.NumberFormat("vi-VN");
@@ -180,6 +181,7 @@ export default function CourseDetail() {
   const [syllabus, setSyllabus] = useState([]);
   const [syllabusLoading, setSyllabusLoading] = useState(false);
   const [syllabusError, setSyllabusError] = useState("");
+  const { openChat, setEntryContext } = useSupportChat();
 
   useEffect(() => {
     let alive = true;
@@ -265,6 +267,13 @@ export default function CourseDetail() {
   }, [data, slug]);
 
   const normalizedBaseModules = useMemo(() => normalizeModuleList(view.modules || []), [view.modules]);
+
+  useEffect(() => {
+    if (!view?.id) return undefined;
+    setEntryContext((prev) => ({ ...(prev || {}), courseId: view.id, courseTitle: view.title, origin: "course_detail" }));
+    return () =>
+      setEntryContext((prev) => (prev && prev.courseId === view.id ? null : prev));
+  }, [view?.id, view?.title, setEntryContext]);
 
   useEffect(() => {
     if (!view.id) {
@@ -597,6 +606,21 @@ export default function CourseDetail() {
                   </button>
                 </>
               )}
+
+              <button
+                type="button"
+                className="btn mt-4 w-full border border-dashed border-primary-300 text-primary-700 hover:border-primary-500"
+                onClick={() =>
+                  openChat({
+                    origin: "course_detail",
+                    courseId: view.id,
+                    courseTitle: view.title,
+                    topic: "course_advice",
+                  })
+                }
+              >
+                Cần tư vấn? Chat với hỗ trợ
+              </button>
 
               <ul className="mt-6 space-y-3 text-sm text-stone-700">
                 <li className="flex items-center gap-2">
