@@ -30,6 +30,21 @@
     window.__teacherCollectPrice = collectPriceState;
     window.__teacherUpdatePriceHint = updateCreatePriceHint;
 
+    function ensureLegacyLevelOption(value){
+      if(!value) return;
+      const select = el('level');
+      if(!select) return;
+      const options = Array.from(select.options || []);
+      const existed = options.some(opt => opt.value === value);
+      if(!existed){
+        const opt = document.createElement('option');
+        opt.value = value;
+        opt.textContent = value;
+        opt.dataset.legacy = 'true';
+        select.appendChild(opt);
+      }
+    }
+
     async function loadModules(courseId){
       const box = el('editorBody'); if(!box) return;
       const list = await api(`/api/courses/${courseId}/modules`);
@@ -232,11 +247,20 @@
               <option value="vi">vi</option>
               <option value="en">en</option>
             </select>
-            <select id="level">
-              <option value="beginner">beginner</option>
-              <option value="intermediate">intermediate</option>
-              <option value="advanced">advanced</option>
-            </select>
+            <div class="field">
+              <span>Trinh do muc tieu</span>
+              <select id="level">
+                <option value="">Chon muc TOEIC</option>
+                <option value="350+">350+ - Nen tang</option>
+                <option value="450+">450+ - So trung cap</option>
+                <option value="550+">550+ - Trung cap</option>
+                <option value="650+">650+ - Trung cao</option>
+                <option value="750+">750+ - Nang cao</option>
+                <option value="850+">850+ - Chuyen sau</option>
+                <option value="950+">950+ - Master</option>
+              </select>
+              <small class="muted">Phan loai theo diem 350+ den toi da.</small>
+            </div>
             <div class="field">
               <span>Gi?</span>
               <input id="price" placeholder="Gi?"/>
@@ -314,7 +338,10 @@
           if(el('slug')) el('slug').value = d.slug||'';
           if(el('short')) el('short').value = d.shortDesc||'';
           if(el('lang')) el('lang').value = d.language||'vi';
-          if(el('level')) el('level').value = d.level||'beginner';
+          if(el('level')){
+            if(d.level) ensureLegacyLevelOption(d.level);
+            el('level').value = d.level||'';
+          }
           if(el('price')) el('price').value = d.price!=null? d.price: '';
           if(window.__teacherUpdatePriceHint){ window.__teacherUpdatePriceHint(); }
           if(d.thumbnailUrl){

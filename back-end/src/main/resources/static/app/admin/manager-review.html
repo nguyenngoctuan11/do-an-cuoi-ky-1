@@ -5,30 +5,135 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Duyệt khóa học (Quản lý)</title>
   <link rel="stylesheet" href="/app/app.css"/>
+  <style>
+    .table-toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: linear-gradient(135deg, rgba(12,15,33,0.95), rgba(15,23,42,0.92));
+      backdrop-filter: blur(6px);
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      padding-bottom: 12px;
+      margin-bottom: 12px;
+    }
+    .table-scroll {
+      max-height: 70vh;
+      overflow: auto;
+    }
+    .table-scroll table { min-width: 960px; }
+    .table-scroll thead th {
+      position: sticky;
+      top: 0;
+      background: rgba(8,12,28,0.95);
+      backdrop-filter: blur(6px);
+      z-index: 10;
+    }
+    select.level-filter {
+      border-radius: 999px;
+      padding: 8px 14px;
+      border: 1px solid rgba(255,255,255,0.15);
+      background: rgba(15,23,42,0.7);
+      color: #fff;
+    }
+  </style>
   <script type="module">
     import {mountNav, mountAdminMenu, mountAdminUser, api, requireAuth} from '/app/app-common.js';
-    const rows = ()=>document.getElementById('rows');
-    async function load(){
-      if(!requireAuth(['MANAGER'])) return;
-      const list = await api('/api/manager/courses/pending');
-      rows().innerHTML = (list||[]).map(c=>`<tr>
-        <td>#${c.id}</td>
-        <td>${c.title}</td>
-        <td>${c.slug}</td>
-        <td>${c.createdByEmail||''}</td>
-        <td class="row">
-          <a class="btn secondary" href="/app/admin/manager-review-detail.html?id=${c.id}">Xem chi tiết</a>
-          <button data-id="${c.id}" class="btn approve">Duyệt</button>
-          <button data-id="${c.id}" class="btn danger reject">Từ chối</button>
-        </td>
-      </tr>`).join('') || '<tr><td colspan="5" class="muted">Chưa có khóa học chờ duyệt</td></tr>';
-      document.querySelectorAll('.approve').forEach(b=>b.onclick=async e=>{ const id=e.target.dataset.id; await api(`/api/manager/courses/${id}/approve`,{method:'POST'}); load(); });
-      document.querySelectorAll('.reject').forEach(b=>b.onclick=async e=>{ const id=e.target.dataset.id; const note = prompt('Lý do từ chối? (tùy chọn)',''); await api(`/api/manager/courses/${id}/reject`,{method:'POST', body: JSON.stringify({note}) }); load(); });
+    const rows = () => document.getElementById('rows');
+    let pendingCourses = [];
+    let currentLevel = 'all';
+
+    const LEVEL_FILTERS = [
+      { value: 'all', label: 'Tất cả trình độ' },
+      { value: 'beginner', label: 'Beginner / Cơ bản' },
+      { value: 'intermediate', label: 'Intermediate / Trung cấp' },
+      { value: 'advanced', label: 'Advanced / Nâng cao' },
+      { value: '350+', label: 'TOEIC 350+' },
+      { value: '450+', label: 'TOEIC 450+' },
+      { value: '550+', label: 'TOEIC 550+' },
+      { value: '650+', label: 'TOEIC 650+' },
+      { value: '750+', label: 'TOEIC 750+' },
+      { value: '850+', label: 'TOEIC 850+' },
+      { value: '950+', label: 'TOEIC 950+' },
+    ];
+
+    const LEGACY_LEVELS = {
+      beginner: ['beginner','basic','co ban','foundation'],
+      intermediate: ['intermediate','trung cap','middle','medium'],
+      advanced: ['advanced','nang cao','expert']
+    };
+
+    function normalizeLevel(value){
+      return (value || '').toString().trim().toLowerCase();
     }
+
+    function matchesFilter(course){
+      if(currentLevel === 'all') return true;
+      const lvl = normalizeLevel(course.level);
+      if(!lvl) return false;
+      if(currentLevel.endsWith('+')) return lvl === currentLevel;
+      const candidates = LEGACY_LEVELS[currentLevel] || [currentLevel];
+      return candidates.includes(lvl);
+    }
+
+    function levelLabel(level){
+      if(!level) return '—';
+      const digits = String(level).match(/(\d{2,3})/);
+      if(digits) return `${digits[1]}+`;
+      const norm = normalizeLevel(level);
+      if(LEGACY_LEVELS.beginner.includes(norm)) return 'Beginner';
+      if(LEGACY_LEVELS.intermediate.includes(norm)) return 'Intermediate';
+      if(LEGACY_LEVELS.advanced.includes(norm)) return 'Advanced';
+      return level;
+    }
+
+    function render(){
+      const list = (pendingCourses || []).filter(matchesFilter);
+      rows().innerHTML = list.map((c) => `
+        <tr>
+          <td>#${c.id}</td>
+          <td>${c.title}</td>
+          <td>${c.slug}</td>
+          <td>${levelLabel(c.level)}</td>
+          <td>${c.createdByEmail || ''}</td>
+          <td class="row">
+            <a class="btn secondary" href="/app/admin/manager-review-detail.html?id=${c.id}">Xem chi tiết</a>
+            <button class="btn approve" data-id="${c.id}">Duyệt</button>
+            <button class="btn danger reject" data-id="${c.id}">Từ chối</button>
+          </td>
+        </tr>
+      `).join('') || '<tr><td colspan="6" class="muted">Chưa có khóa học chờ duyệt</td></tr>';
+
+      document.querySelectorAll('.approve').forEach((btn) => btn.onclick = async (e) => {
+        const id = e.target.dataset.id;
+        await api(`/api/manager/courses/${id}/approve`, { method:'POST' });
+        load(true);
+      });
+      document.querySelectorAll('.reject').forEach((btn) => btn.onclick = async (e) => {
+        const id = e.target.dataset.id;
+        const note = prompt('Lý do từ chối? (tùy chọn)','');
+        await api(`/api/manager/courses/${id}/reject`, { method:'POST', body: JSON.stringify({ note }) });
+        load(true);
+      });
+    }
+
+    async function load(skipAuth = false){
+      if(!skipAuth && !requireAuth(['MANAGER'])) return;
+      pendingCourses = await api('/api/manager/courses/pending');
+      render();
+    }
+
     window.addEventListener('DOMContentLoaded', ()=>{
       mountNav('nav');
       mountAdminMenu('adminMenu','manager-review');
       mountAdminUser('adminUserCard');
+      const filter = document.getElementById('levelFilter');
+      filter.innerHTML = LEVEL_FILTERS.map(opt => `<option value="${opt.value}">${opt.label}</option>`).join('');
+      filter.value = currentLevel;
+      filter.addEventListener('change', (e)=>{
+        currentLevel = e.target.value;
+        render();
+      });
+      document.getElementById('refresh').onclick = ()=>load(true);
       load();
     });
   </script>
@@ -55,16 +160,28 @@
           <h1>Khóa học chờ duyệt</h1>
         </div>
         <div class="card">
-          <div class="row" style="justify-content:space-between;align-items:center">
+          <div class="row table-toolbar" style="justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
             <div>
               <h2 style="margin:0">Danh sách đợi phê duyệt</h2>
               <p class="muted" style="margin:4px 0 0">Theo dõi và xử lý yêu cầu nhanh chóng.</p>
             </div>
-            <button class="btn secondary" onclick="window.location.reload()">Làm mới</button>
+            <div class="row" style="gap:8px;flex-wrap:wrap">
+              <select id="levelFilter" class="level-filter"></select>
+              <button class="btn secondary" id="refresh">Làm mới</button>
+            </div>
           </div>
-          <div style="overflow:auto;margin-top:16px">
+          <div class="table-scroll" style="margin-top:16px">
             <table>
-              <thead><tr><th>ID</th><th>Tiêu đề</th><th>Slug</th><th>Người tạo</th><th>Hành động</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Tiêu đề</th>
+                  <th>Slug</th>
+                  <th>Trình độ</th>
+                  <th>Người tạo</th>
+                  <th>Hành động</th>
+                </tr>
+              </thead>
               <tbody id="rows"></tbody>
             </table>
           </div>
@@ -74,4 +191,3 @@
   </div>
 </body>
 </html>
-

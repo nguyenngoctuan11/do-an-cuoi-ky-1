@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
+import { API_BASE_URL } from "../api/httpClient";
 
 export default function PathDetail(){
   const { id } = useParams();
-  const API = process.env.REACT_APP_API_BASE || "http://localhost:8081";
+  const API = API_BASE_URL;
   const [path, setPath] = useState({ items: [] });
   useEffect(()=>{
     fetch(`${API}/api/paths/${id}`).then(r=>r.json()).then(setPath).catch(()=>setPath({items:[]}));

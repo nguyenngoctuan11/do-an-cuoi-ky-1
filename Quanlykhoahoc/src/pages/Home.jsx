@@ -1,11 +1,18 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import SectionHeading from "../components/SectionHeading";
-import CourseShowcaseCard from "../components/CourseShowcaseCard";
-import { resolveIsFree } from "../utils/price";
-import CoursesByLevel from "./courses/CoursesByLevel";
+import { API_BASE_URL } from "../api/httpClient";
 
-const API_BASE = process.env.REACT_APP_API_BASE || "http://localhost:8081";
+const API_BASE = API_BASE_URL;
+
+const HERO_IMAGE =
+  "https://plus.unsplash.com/premium_photo-1664195786180-23507e5048c1?auto=format&fit=crop&w=1000&q=70";
+const ILLUSTRATION_GENERAL =
+  "/images/s.png";
+const ILLUSTRATION_CLASS =
+  "/images/cs.png";
+const ILLUSTRATION_TEST =
+  "/images/s.png";
 
 function resolveThumb(u) {
   if (!u) return null;
@@ -15,25 +22,13 @@ function resolveThumb(u) {
   return `${API_BASE}${s}`;
 }
 
-function formatDurationFromMinutes(minutes) {
-  if (minutes == null) return null;
-  const totalMinutes = Number(minutes);
-  if (!Number.isFinite(totalMinutes) || totalMinutes <= 0) return null;
-  const hours = Math.floor(totalMinutes / 60);
-  const mins = Math.round(totalMinutes % 60);
-  if (hours === 0) return `${mins} phút`;
-  if (mins === 0) return `${hours} giờ`;
-  return `${hours}h${String(mins).padStart(2, "0")}p`;
-}
-
-function levelPriority(levelLabel) {
-  const label = (levelLabel || "").toLowerCase();
-  if (!label) return 9;
-  if (label.includes("cơ bản") || label.includes("beginner")) return 0;
-  if (label.includes("trung") || label.includes("intermediate")) return 1;
-  if (label.includes("nâng cao") || label.includes("advanced")) return 2;
-  if (label.includes("chuyên sâu") || label.includes("expert")) return 3;
-  return 5;
+function resolveAssetUrl(u) {
+  if (!u) return "";
+  const raw = String(u).trim();
+  if (!raw) return "";
+  if (/^(?:https?:|data:|blob:)/i.test(raw)) return raw;
+  const normalized = raw.startsWith("/") ? raw : `/${raw}`;
+  return `${API_BASE}${normalized}`;
 }
 
 function coerceNumericId(value) {
@@ -64,194 +59,6 @@ function normalizeEnrollmentCourse(course) {
   };
 }
 
-function CourseCluster({ eyebrow, title, subtitle, courses, loading, emptyMessage }) {
-  const preview = courses.slice(0, 3);
-  return (
-    <div className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_25px_60px_rgba(15,23,42,0.08)]">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          {eyebrow && <p className="text-xs uppercase tracking-[0.3em] text-stone-400">{eyebrow}</p>}
-          <h3 className="text-2xl font-semibold text-stone-900">{title}</h3>
-          {subtitle && <p className="text-sm text-stone-500">{subtitle}</p>}
-        </div>
-        <Link
-          to="/courses"
-          className="inline-flex items-center gap-2 rounded-full border border-stone-200 px-4 py-2 text-sm font-semibold text-stone-600 transition hover:border-stone-400"
-        >
-          Xem tất cả
-          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="m9 6 6 6-6 6" />
-          </svg>
-        </Link>
-      </div>
-      {loading ? (
-        <div className="mt-6 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 3 }).map((_, idx) => (
-            <div key={idx} className="h-80 rounded-3xl bg-stone-100 animate-pulse" />
-          ))}
-        </div>
-      ) : preview.length === 0 ? (
-        <p className="mt-6 rounded-2xl border border-dashed border-stone-200 bg-stone-50/70 px-6 py-8 text-center text-sm text-stone-500">
-          {emptyMessage}
-        </p>
-      ) : (
-        <div className="mt-6 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {preview.map((course) => (
-            <CourseShowcaseCard
-              key={course.id}
-              id={course.id}
-              slug={course.slug}
-              title={course.title}
-              level={course.level}
-              lessonsCount={course.lessonsCount}
-              thumbnail={course.thumbnail}
-              price={course.price}
-              isFree={course.isFree}
-              durationLabel={course.durationLabel}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function LandingCourseShelf() {
-  const [courses, setCourses] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [sortMode, setSortMode] = useState("asc");
-
-  useEffect(() => {
-    let alive = true;
-    async function load() {
-      setLoading(true);
-      setError("");
-      try {
-        const res = await fetch(`${API_BASE}/api/public/courses-sql?status=published&limit=12`, {
-          headers: { Accept: "application/json" },
-        });
-        if (!res.ok) throw new Error("Không thể tải danh sách khóa học");
-        const data = await res.json();
-        if (!alive) return;
-        if (Array.isArray(data)) {
-          const normalized = data.map((c) => {
-            const priceValue = c.price ?? c.tuition_fee ?? c.tuitionFee ?? c.priceValue ?? null;
-            return {
-              id: c.id,
-              slug: c.slug,
-              title: c.title,
-              level: c.level,
-              lessonsCount: c.lessons_count ?? c.lessonsCount ?? 0,
-              thumbnail: resolveThumb(c.thumbnail_url ?? c.thumbnailUrl ?? c.thumbnail_path ?? c.thumbnailPath ?? null),
-              price: priceValue,
-              isFree: resolveIsFree(priceValue, c.is_free ?? c.isFree),
-              durationLabel: formatDurationFromMinutes(
-                c.total_minutes ?? c.totalMinutes ?? c.duration_minutes ?? c.durationMinutes ?? null,
-              ),
-            };
-          });
-          setCourses(normalized);
-        } else {
-          setCourses([]);
-        }
-      } catch (err) {
-        if (!alive) return;
-        setError(err?.message || "Không thể tải dữ liệu");
-        setCourses([]);
-      } finally {
-        if (alive) setLoading(false);
-      }
-    }
-    load();
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  const orderedCourses = useMemo(() => {
-    const cloned = [...courses];
-    cloned.sort((a, b) => {
-      const diff = levelPriority(a.level) - levelPriority(b.level);
-      if (diff !== 0) return sortMode === "asc" ? diff : -diff;
-      return (a.title || "").localeCompare(b.title || "");
-    });
-    return cloned;
-  }, [courses, sortMode]);
-
-  const highlightCourses = useMemo(() => orderedCourses.slice(0, 3), [orderedCourses]);
-  const proCourses = useMemo(() => orderedCourses.filter((course) => !course.isFree), [orderedCourses]);
-  const freeCourses = useMemo(() => orderedCourses.filter((course) => course.isFree), [orderedCourses]);
-
-  return (
-    <section className="bg-[#fdf8f1]" id="landing-courses">
-      <div className="mx-auto max-w-7xl px-4 py-16">
-        <div className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_35px_70px_rgba(15,23,42,0.08)]">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-wrap items-center gap-3 text-sm font-semibold text-stone-700">
-              <span>Sắp xếp theo cấp độ</span>
-              <select
-                value={sortMode}
-                onChange={(e) => setSortMode(e.target.value)}
-                className="rounded-full border border-stone-200 bg-white px-4 py-2 text-sm font-semibold text-stone-700 shadow-sm focus:border-primary-500 focus:outline-none"
-              >
-                <option value="asc">Từ cơ bản đến nâng cao</option>
-                <option value="desc">Từ nâng cao đến cơ bản</option>
-              </select>
-            </div>
-            <span className="text-sm text-stone-500">{loading ? "Đang tải..." : `${orderedCourses.length} khóa học`}</span>
-          </div>
-          {error && <p className="mt-3 rounded-2xl bg-red-50 px-4 py-2 text-sm text-red-600">{error}</p>}
-          <div className="mt-6 grid gap-6 lg:grid-cols-3">
-            {loading &&
-              Array.from({ length: 3 }).map((_, idx) => (
-                <div key={idx} className="h-80 rounded-3xl bg-stone-100 animate-pulse" />
-              ))}
-            {!loading && highlightCourses.length === 0 && (
-              <div className="col-span-full rounded-2xl border border-dashed border-stone-200 bg-stone-50/70 px-6 py-10 text-center text-sm text-stone-500">
-                Chưa có khóa học để hiển thị.
-              </div>
-            )}
-            {!loading &&
-              highlightCourses.length > 0 &&
-              highlightCourses.map((course) => (
-                <CourseShowcaseCard
-                  key={course.id}
-                  id={course.id}
-                  slug={course.slug}
-                  title={course.title}
-                  level={course.level}
-                  lessonsCount={course.lessonsCount}
-                  thumbnail={course.thumbnail}
-                  price={course.price}
-                  isFree={course.isFree}
-                  durationLabel={course.durationLabel}
-                />
-              ))}
-          </div>
-        </div>
-        <div className="mt-12 space-y-12">
-          <CourseCluster
-            eyebrow="Khóa học Pro"
-            title="Bứt tốc với các khoá Pro"
-            subtitle="Nội dung chuyên sâu, mentor đồng hành và tài liệu độc quyền."
-            courses={proCourses}
-            loading={loading}
-            emptyMessage="Hiện chưa có khoá Pro nào được mở bán."
-          />
-          <CourseCluster
-            eyebrow="Khóa học miễn phí"
-            title="Khởi động nhanh với khoá miễn phí"
-            subtitle="Làm quen với nền tảng, học thử miễn phí trước khi nâng cấp."
-            courses={freeCourses}
-            loading={loading}
-            emptyMessage="Chưa có khoá miễn phí nào trong danh sách."
-          />
-        </div>
-      </div>
-    </section>
-  );
-}
 
 function Hero({ progressSlides, loadingProgress, avgPercent }) {
   const navigate = useNavigate();
@@ -301,13 +108,13 @@ function Hero({ progressSlides, loadingProgress, avgPercent }) {
         <div>
           <div className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-white px-3 py-1 text-xs text-primary-700">
             <span className="w-1.5 h-1.5 rounded-full bg-primary-600" />
-            Học lập trình hiệu quả, có lộ trình
+            Nền tảng tiếng Anh toàn diện
           </div>
           <h1 className="mt-4 text-4xl md:text-5xl font-extrabold leading-tight text-stone-900">
-            Nâng cấp sự nghiệp với khoá học thực chiến
+            Làm chủ tiếng Anh với mentor và AI song hành
           </h1>
           <p className="mt-4 text-stone-600 text-lg">
-            Lộ trình rõ ràng, mentor tận tâm, dự án thực tế. Theo dõi tiến độ từng khoá học và tiếp tục ngay nơi bạn dừng lại.
+            Chọn lộ trình IELTS, TOEIC, Giao tiếp hoặc Business English với bài học tương tác, flashcard thông minh và phản hồi phát âm chuẩn quốc tế.
           </p>
           <div className="mt-6 flex flex-col sm:flex-row gap-3">
             <button
@@ -326,7 +133,7 @@ function Hero({ progressSlides, loadingProgress, avgPercent }) {
               <div className="w-8 h-8 rounded-full bg-primary-300 border border-white" />
               <div className="w-8 h-8 rounded-full bg-primary-400 border border-white" />
             </div>
-            <span>50k+ học viên đã tin tưởng</span>
+            <span>65.000+ học viên đã nâng band</span>
             {slidesCount > 0 && (
               <span className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-semibold text-stone-600">
                 <span className="h-2 w-2 rounded-full bg-primary-500" />
@@ -336,18 +143,16 @@ function Hero({ progressSlides, loadingProgress, avgPercent }) {
           </div>
         </div>
         <div className="relative">
-          <div className="relative aspect-[4/3] overflow-hidden rounded-3xl bg-gradient-to-br from-[#b57b45] to-[#6d3f2b] shadow-2xl">
+          <div className="relative aspect-[4/3] overflow-hidden rounded-3xl bg-gradient-to-br from-[#0d2f5d] to-[#0f498d] shadow-2xl">
             {activeSlide ? (
               <>
-                {activeSlide.thumbnail && (
-                  <img
-                    src={activeSlide.thumbnail}
-                    alt={activeSlide.title}
-                    className="absolute inset-0 h-full w-full object-cover opacity-60"
-                    loading="lazy"
-                  />
-                )}
-                <div className="absolute inset-0 bg-gradient-to-tr from-black/70 via-black/30 to-transparent" />
+                <img
+                  src={activeSlide.thumbnail || HERO_IMAGE}
+                  alt={activeSlide.title || "English course"}
+                  className="absolute inset-0 h-full w-full object-cover opacity-70"
+                  loading="lazy"
+                />
+                <div className="absolute inset-0 bg-gradient-to-tr from-black/60 via-black/30 to-transparent" />
                 <div className="relative z-10 flex h-full flex-col justify-between p-6 text-white">
                   <div>
                     <span className="inline-flex items-center rounded-full bg-white/20 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-white/90">
@@ -425,6 +230,327 @@ function Hero({ progressSlides, loadingProgress, avgPercent }) {
   );
 }
 
+function StatsBand() {
+  const stats = [
+    { value: "65.000+", label: "Học viên đạt mục tiêu" },
+    { value: "8+", label: "Năm kinh nghiệm luyện thi" },
+    { value: "120+", label: "Mentor bản ngữ & Việt Nam" },
+    { value: "300+", label: "Bài học tương tác & đề thi" },
+  ];
+  return (
+    <section className="bg-white">
+      <div className="mx-auto max-w-7xl px-4 py-8">
+        <div className="grid gap-4 rounded-3xl border border-white/80 bg-white/90 p-4 shadow-[0_20px_40px_rgba(15,23,42,0.06)] sm:grid-cols-2 lg:grid-cols-4">
+          {stats.map((item) => (
+            <div key={item.label} className="rounded-2xl bg-gradient-to-br from-primary-50 to-white px-4 py-6 text-center">
+              <p className="text-2xl font-bold text-primary-600">{item.value}</p>
+              <p className="mt-1 text-sm text-stone-600">{item.label}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ProgramShowcase() {
+  const programs = [
+    {
+      title: "IELTS Ready",
+      desc: "Tăng từ 5.0 lên 7.5+ với mentor 1:1, bài Speaking & Writing được chấm hàng tuần.",
+      points: ["36 bài học tương tác", "Flashcard từ vựng Cambridge", "Lịch học linh hoạt"],
+      cta: "/courses?track=ielts",
+      color: "from-[#fdf2e9] to-white",
+    },
+    {
+      title: "TOEIC Express",
+      desc: "Tập trung Listening & Reading, tăng 200+ điểm sau 6 tuần với đề sát ETS.",
+      points: ["12 đề thi thử", "Chiến lược giải nhanh từng Part", "Kho audio song ngữ"],
+      cta: "/courses?track=toeic",
+      color: "from-[#e8f4ff] to-white",
+    },
+    {
+      title: "Speaking Lab",
+      desc: "Lớp giao tiếp chuyên sâu, luyện phát âm IPA và phản xạ hội thoại với AI + mentor bản ngữ.",
+      points: ["AI chấm phát âm", "CLB nói chuyện hằng tuần", "Mentor sửa lỗi trực tiếp"],
+      cta: "/courses?track=speaking",
+      color: "from-[#f1f3ff] to-white",
+    },
+    {
+      title: "Kids English Adventures",
+      desc: "Chương trình cho bé 6-12 tuổi với trò chơi gamified, câu chuyện và giáo viên nước ngoài.",
+      points: ["Nhân vật hoạt hình", "Bảng điều khiển dành cho phụ huynh", "Lớp live hàng tuần"],
+      cta: "/courses?track=kids",
+      color: "from-[#fff0f7] to-white",
+    },
+  ];
+  return (
+    <section className="bg-[#fdf8f1]">
+      <div className="mx-auto max-w-7xl px-4 py-16">
+        <div className="text-center">
+          <p className="text-xs uppercase tracking-[0.3em] text-stone-400">Lộ trình nổi bật</p>
+          <h2 className="mt-2 text-3xl font-semibold text-stone-900">Chọn mục tiêu tiếng Anh phù hợp với bạn</h2>
+          <p className="mt-2 text-sm text-stone-500">
+            Không cần hiển thị toàn bộ danh sách khóa học. Khi bạn sẵn sàng, chỉ cần nhấn “Khám phá khóa học” để tới trang chi tiết.
+          </p>
+        </div>
+        <div className="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+          {programs.map((program) => (
+            <article
+              key={program.title}
+              className={`flex h-full flex-col rounded-[28px] border border-white/70 bg-gradient-to-b ${program.color} p-6 shadow-[0_25px_55px_rgba(15,23,42,0.08)]`}
+            >
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.35em] text-primary-500">Program</p>
+                <h3 className="mt-2 text-xl font-bold text-stone-900">{program.title}</h3>
+                <p className="mt-2 text-sm text-stone-600">{program.desc}</p>
+              </div>
+              <ul className="mt-6 space-y-2 text-sm text-stone-600">
+                {program.points.map((point) => (
+                  <li key={point} className="flex items-start gap-2">
+                    <span className="mt-1 h-1.5 w-1.5 rounded-full bg-primary-500" />
+                    <span>{point}</span>
+                  </li>
+                ))}
+              </ul>
+              <Link
+                to={program.cta}
+                className="mt-6 inline-flex items-center justify-center rounded-full border border-primary-200 px-4 py-2 text-sm font-semibold text-primary-700 transition hover:border-primary-500 hover:bg-white"
+              >
+                Khám phá khóa học
+                <svg viewBox="0 0 24 24" className="ml-2 h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="m9 6 6 6-6 6" />
+                </svg>
+              </Link>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function HeritageBanner() {
+  return (
+    <section className="bg-white">
+      <div className="mx-auto max-w-6xl px-4 py-16">
+        <div className="flex flex-col gap-8 rounded-[40px] border border-blue-100 bg-gradient-to-b from-white to-blue-50/40 p-8 text-center lg:flex-row lg:items-center lg:text-left">
+          <div className="flex-1">
+            <p className="text-sm font-semibold uppercase tracking-[0.4em] text-blue-400">#1 Việt Nam</p>
+            <h2 className="mt-2 text-3xl font-semibold text-stone-900">Chinh phục mục tiêu tiếng Anh với nền tảng học tập được tin dùng suốt 12 năm</h2>
+            <p className="mt-4 text-sm text-stone-600">
+              Phát triển từ năm 2013, nền tảng hiện đồng hành cùng hơn 2 triệu học viên và được hệ sinh thái TECHFEST bình chọn là EdTech học tiếng Anh sáng tạo.
+              Lịch học linh hoạt, bài tập tương tác và hệ thống đánh giá chuẩn quốc tế giúp bạn xác định lộ trình rõ ràng.
+            </p>
+          </div>
+          <div className="flex flex-1 items-center justify-center">
+            <div className="relative rounded-full border-2 border-blue-200 px-10 py-8 text-center shadow-[0_15px_40px_rgba(37,99,235,0.15)]">
+              <p className="text-sm font-semibold uppercase tracking-widest text-blue-400">XÓA BỎ RÀO CẢN</p>
+              <p className="text-5xl font-black text-blue-500">12</p>
+              <p className="text-sm font-semibold text-blue-400">NĂM ĐỒNG HÀNH</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function SolutionTiles() {
+  const tiles = [
+    {
+      logo: "VOCA.VN",
+      tone: "text-blue-500",
+      description:
+        "Nền tảng học tiếng Anh tổng quát với 500+ khóa theo kỹ năng, cấp độ. Học qua trò chơi, flashcard và AI phản hồi giúp ghi nhớ lâu.",
+      cta: "Bắt đầu miễn phí",
+      link: "/register",
+      bg: "from-[#f1f9ff] to-white",
+      image: ILLUSTRATION_GENERAL,
+    },
+    {
+      logo: "VOCA ClassZoom",
+      tone: "text-orange-500",
+      description:
+        "Lớp học trực tuyến 1 kèm 1 kết hợp e-learning và mentor sư phạm. Duy trì động lực, có giáo trình cá nhân và buổi kèm mỗi tuần.",
+      cta: "Nhận 2 buổi học thử",
+      link: "/survey",
+      bg: "from-[#fff7eb] to-white",
+      image: ILLUSTRATION_CLASS,
+    },
+  ];
+  return (
+    <section className="bg-white">
+      <div className="mx-auto max-w-7xl px-4 py-16 space-y-12">
+        {tiles.map((tile) => (
+          <div
+            key={tile.logo}
+            className={`grid gap-6 rounded-[36px] border border-white/70 bg-gradient-to-r ${tile.bg} p-8 shadow-[0_30px_60px_rgba(15,23,42,0.08)] lg:grid-cols-2`}
+          >
+            <div>
+              <p className={`text-2xl font-bold ${tile.tone}`}>{tile.logo}</p>
+              <p className="mt-2 text-base font-semibold text-stone-900">Nền tảng học tiếng Anh vui, hiệu quả</p>
+              <p className="mt-3 text-sm text-stone-600">{tile.description}</p>
+              <a
+                href={tile.link}
+                className="mt-6 inline-flex items-center rounded-full border border-stone-200 bg-white px-5 py-2 text-sm font-semibold text-stone-700 shadow-sm hover:border-primary-400"
+              >
+                {tile.cta}
+              </a>
+            </div>
+            <div className="flex items-center justify-center">
+              <img src={tile.image} alt={tile.logo} className="h-48 w-64 rounded-[32px] object-cover shadow-inner" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function PlacementTestCTA() {
+  return (
+    <section className="bg-[#fffdf5]">
+      <div className="mx-auto max-w-6xl px-4 py-16">
+        <div className="rounded-[36px] bg-white p-8 shadow-[0_25px_55px_rgba(15,23,42,0.08)] lg:grid lg:grid-cols-[1.2fr,0.8fr] lg:items-center">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.4em] text-amber-500">VOCA English Test</p>
+            <h3 className="mt-2 text-2xl font-bold text-stone-900">Kiểm tra trình độ tiếng Anh miễn phí</h3>
+            <p className="mt-3 text-sm text-stone-600">
+              Bài test dựa trên chuẩn CEFR giúp bạn biết mình đang ở cấp độ nào (A1 → C1), từ đó nhận lộ trình phù hợp trước khi đăng ký khóa học.
+            </p>
+        <Link
+          to="/survey?step=placement"
+          className="mt-4 inline-flex items-center rounded-full bg-amber-500 px-5 py-2 text-sm font-semibold text-white shadow hover:bg-amber-600"
+        >
+          Làm bài kiểm tra ngay
+          <svg viewBox="0 0 24 24" className="ml-2 h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="m9 6 6 6-6 6" />
+          </svg>
+        </Link>
+      </div>
+      <div className="mt-6 lg:mt-0 flex justify-center">
+        <div className="rounded-[30px] bg-gradient-to-br from-[#fff4d6] to-white p-6 text-center shadow-inner">
+          <img src={ILLUSTRATION_TEST} alt="Placement test" className="mb-4 h-32 w-full rounded-2xl object-cover" />
+          <p className="text-sm font-semibold text-amber-500">Trình độ của bạn</p>
+          <div className="mt-3 flex items-center justify-between rounded-2xl bg-white px-4 py-2 text-sm font-semibold text-stone-600">
+            <span>A1</span>
+            <span>A2</span>
+            <span>B1</span>
+            <span>B2</span>
+          </div>
+          <p className="mt-3 text-xs text-stone-500">Mỗi cấp độ gồm phân tích kỹ năng nghe, đọc, nói và vốn từ.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+  );
+}
+
+function TeacherShowcase() {
+  const [teachers, setTeachers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const fallbacks = [
+    "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=400&q=60",
+    "https://images.unsplash.com/photo-1525130413817-d45c1d127c42?auto=format&fit=crop&w=400&q=60",
+    "https://images.unsplash.com/photo-1504593811423-6dd665756598?auto=format&fit=crop&w=400&q=60",
+    "https://images.unsplash.com/photo-1544723795-3fb6469f5b39?auto=format&fit=crop&w=400&q=60",
+  ];
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    setError("");
+    fetch(`${API_BASE}/api/public/teachers/highlights?limit=6`)
+      .then((res) => {
+        if (!res.ok) throw new Error("Không thể tải danh sách giảng viên");
+        return res.json();
+      })
+      .then((data) => {
+        if (!alive) return;
+        setTeachers(Array.isArray(data) ? data : []);
+      })
+      .catch((err) => {
+        if (!alive) return;
+        setError(err?.message || "Không thể tải danh sách giảng viên");
+        setTeachers([]);
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const placeholderCards = fallbacks.map((url, idx) => ({
+    id: `fallback-${idx}`,
+    fullName: ["Thầy Andrew", "Cô Minh Anh", "Thầy David", "Cô Julie"][idx % 4],
+    avatarUrl: url,
+    bio: "Giảng viên tiếng Anh giao tiếp và luyện thi.",
+    courseCount: 5 - (idx % 3),
+    lessonCount: 60 + idx * 10,
+  }));
+  const cards = teachers.length ? teachers : placeholderCards;
+  const skeletons = Array.from({ length: 4 }, (_, idx) => ({
+    id: `skeleton-${idx}`,
+    isSkeleton: true,
+  }));
+  const listToRender = loading && teachers.length === 0 ? skeletons : cards;
+
+  return (
+    <section className="bg-white">
+      <div className="mx-auto max-w-7xl px-4 py-16">
+        <div className="flex flex-col gap-2 text-center">
+          <p className="text-xs uppercase tracking-[0.3em] text-sky-400">Đội ngũ mentor</p>
+          <h2 className="text-3xl font-semibold text-stone-900">Giảng viên đồng hành cùng bạn</h2>
+          <p className="text-sm text-stone-500">Hơn 100 giáo viên bản ngữ và Việt Nam thiết kế bài học, chấm bài và tổ chức lớp trực tuyến mỗi tuần.</p>
+        </div>
+        {error && <p className="mt-4 rounded-xl bg-red-50 px-4 py-2 text-sm text-red-600 text-center">{error}</p>}
+        <div className="mt-10 overflow-x-auto pb-4">
+          <div className="flex gap-6 min-w-full">
+            {listToRender.map((teacher, idx) => (
+              <article
+                key={teacher.id ?? idx}
+                className="min-w-[240px] flex-1 rounded-[28px] border border-white/80 bg-gradient-to-b from-white to-sky-50 p-5 shadow-[0_20px_50px_rgba(15,23,42,0.08)]"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="h-16 w-16 overflow-hidden rounded-full bg-sky-100">
+                    {teacher.isSkeleton ? (
+                      <div className="h-full w-full animate-pulse bg-sky-200" />
+                    ) : (
+                      <img
+                        src={resolveAssetUrl(teacher.avatarUrl) || fallbacks[idx % fallbacks.length]}
+                        alt={teacher.fullName || "Teacher"}
+                        className="h-full w-full object-cover"
+                      />
+                    )}
+                  </div>
+                  <div>
+                    <p className="font-semibold text-stone-900">{teacher.fullName || "Đang cập nhật"}</p>
+                    {!teacher.isSkeleton && (
+                      <p className="text-xs text-stone-500">
+                        {teacher.courseCount || 0} khóa · {teacher.lessonCount || 0} bài học
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <p className="mt-4 text-sm text-stone-600 line-clamp-3">
+                  {teacher.isSkeleton
+                    ? "Đang tải thông tin giảng viên..."
+                    : teacher.bio || "Giảng viên tiếng Anh tại VOCA với nhiều năm kinh nghiệm luyện thi."}
+                </p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function Trusted() {
   const logos = ["Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta"];
   return (
@@ -446,8 +572,8 @@ function Trusted() {
 function Features() {
   const items = [
     {
-      title: "Lộ trình rõ ràng",
-      desc: "Từng bước từ cơ bản đến nâng cao, phù hợp nhiều cấp độ.",
+      title: "Lộ trình IELTS/TOEIC rõ ràng",
+      desc: "Được thiết kế theo cấp độ CEFR từ A1 đến C1, có checklist từng tuần và bài kiểm tra định kỳ.",
       icon: (
         <svg viewBox="0 0 24 24" className="w-6 h-6 text-primary-600" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M3 12h18M3 6h18M3 18h18" />
@@ -455,8 +581,8 @@ function Features() {
       ),
     },
     {
-      title: "Mentor đồng hành",
-      desc: "Giải đáp nhanh, review bài tập và định hướng nghề nghiệp.",
+      title: "Mentor & AI phản hồi phát âm",
+      desc: "Thu âm giọng nói, nhận nhận xét tức thì và được mentor chỉnh sửa 1:1 mỗi tuần.",
       icon: (
         <svg viewBox="0 0 24 24" className="w-6 h-6 text-primary-600" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M12 12c2.761 0 5-2.239 5-5S14.761 2 12 2 7 4.239 7 7s2.239 5 5 5Zm0 2c-4.418 0-8 2.239-8 5v3h16v-3c0-2.761-3.582-5-8-5Z" />
@@ -464,8 +590,8 @@ function Features() {
       ),
     },
     {
-      title: "Dự án thực tế",
-      desc: "Xây portfolio chất lượng với case study bám sát doanh nghiệp.",
+      title: "Flashcard & bài tập tương tác",
+      desc: "Học từ vựng bằng spaced-repetition, luyện nghe với phụ đề song ngữ và viết bài được AI chấm điểm.",
       icon: (
         <svg viewBox="0 0 24 24" className="w-6 h-6 text-primary-600" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M3 7h18v13H3z" /><path d="M8 7V4h8v3" />
@@ -499,14 +625,14 @@ function Features() {
 function Testimonials() {
   const items = [
     {
-      name: "Minh Anh",
-      role: "Front-end Dev",
-      text: "Lộ trình rõ ràng, mentor hỗ trợ nhanh. Sau 3 tháng mình đã có job đầu tiên.",
+      name: "Quỳnh Chi",
+      role: "IELTS 7.5",
+      text: "Lịch học linh hoạt và bài chấm Speaking chi tiết giúp mình tăng 1.5 band sau 8 tuần.",
     },
     {
-      name: "Quang Huy",
-      role: "Fullstack Dev",
-      text: "Bài tập thực tế, bám sát công việc. Portfolio sau khoá học giúp mình nổi bật khi phỏng vấn.",
+      name: "Tuấn Minh",
+      role: "TOEIC 905",
+      text: "Flashcard và đề thi thử giống cấu trúc thật. Mỗi tuần mentor gọi video để luyện giao tiếp nên mình tiến bộ rõ rệt.",
     },
   ];
   return (
@@ -545,8 +671,8 @@ function CtaBanner() {
           <div className="absolute inset-0 bg-gradient-to-r from-primary-700 to-primary-500 opacity-95" />
           <div className="relative p-8 md:p-12 text-white grid md:grid-cols-2 gap-6 items-center">
             <div>
-              <h3 className="text-2xl md:text-3xl font-bold">Sẵn sàng bứt phá sự nghiệp?</h3>
-              <p className="mt-2 text-white/90">Tham gia ngay hôm nay để nhận tư vấn lộ trình miễn phí.</p>
+              <h3 className="text-2xl md:text-3xl font-bold">Sẵn sàng bứt phá tiếng Anh?</h3>
+              <p className="mt-2 text-white/90">Đăng ký nhận lộ trình cá nhân hóa IELTS/TOEIC miễn phí từ chuyên gia của chúng tôi.</p>
             </div>
             <div className="flex md:justify-end">
               <Link to="/register" className="btn bg-white text-primary-700 border-white hover:bg-stone-50">Đăng ký ngay</Link>
@@ -662,23 +788,14 @@ export default function Home() {
         loadingProgress={heroProgress.loading}
         avgPercent={heroProgress.avgPercent}
       />
-      <LandingCourseShelf />
+      <StatsBand />
+      <HeritageBanner />
+      <SolutionTiles />
+      <ProgramShowcase />
+      <PlacementTestCTA />
+      <TeacherShowcase />
       <Trusted />
       <Features />
-      {/* Danh sách khóa học thật, sắp xếp theo cấp độ */}
-      <section id="courses" className="bg-stone-50">
-        <div className="max-w-7xl mx-auto px-4 py-16">
-          <SectionHeading
-            eyebrow="Khoá học theo cấp độ"
-            title="Lộ trình thực chiến cho mọi cấp độ"
-            subtitle="Tự động lấy dữ liệu từ backend và sắp xếp theo level."
-            center
-          />
-          <div className="mt-10">
-            <CoursesByLevel />
-          </div>
-        </div>
-      </section>
       <Testimonials />
       <CtaBanner />
     </div>

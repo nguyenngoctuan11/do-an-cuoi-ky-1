@@ -3,10 +3,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import SectionHeading from "../components/SectionHeading";
 import { normalizePriceValue, resolveIsFree } from "../utils/price";
-import httpClient from "../api/httpClient";
+import httpClient, { API_BASE_URL } from "../api/httpClient";
 import { useAuth } from "../context/AuthContext";
 
-const API_BASE = process.env.REACT_APP_API_BASE || "";
+const API_BASE = API_BASE_URL;
 const moneyFormatter = new Intl.NumberFormat("vi-VN");
 
 function formatMoney(value) {

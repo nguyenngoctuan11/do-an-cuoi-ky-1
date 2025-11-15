@@ -27,6 +27,7 @@ export default function CourseShowcaseCard({
   studentsCount,
   price,
   isFree = false,
+  teacherName,
 }) {
   const href = `/courses/${encodeURIComponent(slug || id)}`;
   const formattedPrice = formatMoney(price);
@@ -133,7 +134,9 @@ export default function CourseShowcaseCard({
       </div>
 
       <div className="flex items-center justify-between border-t border-dashed border-stone-200 pt-4 text-sm">
-        <span className="text-stone-500">Học linh hoạt · Mentor đồng hành</span>
+        <span className="text-stone-500">
+          {teacherName ? `GV: ${teacherName}` : "Học linh hoạt · Mentor đồng hành"}
+        </span>
         <Link
           to={href}
           className="inline-flex items-center gap-1 rounded-full border border-primary-200 px-4 py-1.5 text-primary-700 transition hover:border-primary-600 hover:bg-primary-50"

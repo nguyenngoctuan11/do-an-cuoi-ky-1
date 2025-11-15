@@ -27,7 +27,8 @@ public interface CourseRepository extends JpaRepository<Course, Long> {
 
     @Query(value = "\n" +
             "SELECT\n" +
-            "  c.id, c.title, c.slug, c.level, c.status, c.price, c.is_free AS isFree, c.thumbnail_url AS thumbnailUrl,\n" +
+            "  c.id, c.title, c.slug, c.level, c.status, u.full_name AS teacherName,\n" +
+            "  c.price, c.is_free AS isFree, c.thumbnail_url AS thumbnailUrl,\n" +
             "  (SELECT COUNT(*)\n" +
             "     FROM dbo.lessons l JOIN dbo.modules m ON l.module_id = m.id\n" +
             "    WHERE m.course_id = c.id) AS lessonsCount,\n" +
@@ -38,6 +39,7 @@ public interface CourseRepository extends JpaRepository<Course, Long> {
             "    WHERE m.course_id = c.id AND a.kind = N'video'\n" +
             "    ORDER BY a.id) AS previewVideoUrl\n" +
             "FROM dbo.courses c\n" +
+            "JOIN dbo.users u ON u.id = c.created_by\n" +
             "WHERE (:status IS NULL OR c.status = :status)\n" +
             "  AND (:keyword IS NULL OR c.title LIKE N'%' + :keyword + '%' OR c.slug LIKE N'%' + :keyword + '%')\n" +
             "ORDER BY c.created_at DESC\n" +
@@ -50,7 +52,8 @@ public interface CourseRepository extends JpaRepository<Course, Long> {
     // Phiên bản trả tên cột đúng T-SQL (snake_case)
     @Query(value = "\n" +
             "SELECT\n" +
-            "  c.id, c.title, c.slug, c.level, c.status, c.price, c.is_free, c.thumbnail_url,\n" +
+            "  c.id, c.title, c.slug, c.level, c.status, u.full_name AS teacher_name,\n" +
+            "  c.price, c.is_free, c.thumbnail_url,\n" +
             "  (SELECT COUNT(*)\n" +
             "     FROM dbo.lessons l JOIN dbo.modules m ON l.module_id = m.id\n" +
             "    WHERE m.course_id = c.id) AS lessons_count,\n" +
@@ -61,6 +64,7 @@ public interface CourseRepository extends JpaRepository<Course, Long> {
             "    WHERE m.course_id = c.id AND a.kind = N'video'\n" +
             "    ORDER BY a.id) AS preview_video_url\n" +
             "FROM dbo.courses c\n" +
+            "JOIN dbo.users u ON u.id = c.created_by\n" +
             "WHERE (:status IS NULL OR c.status = :status)\n" +
             "  AND (:keyword IS NULL OR c.title LIKE N'%' + :keyword + '%' OR c.slug LIKE N'%' + :keyword + '%')\n" +
             "ORDER BY c.created_at DESC\n" +
@@ -71,7 +75,7 @@ public interface CourseRepository extends JpaRepository<Course, Long> {
                                                      @Param("keyword") String keyword);
 
     @Query(value = "\n" +
-            "SELECT c.id, c.title, c.slug, c.status, c.approval_status AS approvalStatus,\n" +
+            "SELECT c.id, c.title, c.slug, c.level, c.status, c.approval_status AS approvalStatus,\n" +
             "       u.email AS createdByEmail, u.full_name AS createdByName, c.created_at AS createdAt\n" +
             "FROM dbo.courses c\n" +
             "JOIN dbo.users u ON u.id = c.created_by\n" +

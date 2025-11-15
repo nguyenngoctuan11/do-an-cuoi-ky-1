@@ -9,6 +9,7 @@ public interface CourseCardSqlProjection {
     String getSlug();
     String getLevel();
     String getStatus();
+    String getTeacher_name();
     BigDecimal getPrice();
     Boolean getIs_free();
     String getThumbnail_url();

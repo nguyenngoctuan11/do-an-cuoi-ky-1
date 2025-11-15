@@ -1,8 +1,9 @@
 /* eslint-disable */
 import { useEffect, useMemo, useState } from "react";
+import { API_BASE_URL } from "../../api/httpClient";
 
 export default function CheckoutSuccess() {
-  const API = process.env.REACT_APP_API_BASE || "http://localhost:8081";
+  const API = API_BASE_URL;
   const [status, setStatus] = useState("pending");
   const [message, setMessage] = useState("Đang xác nhận và kích hoạt khóa học của bạn...");
 

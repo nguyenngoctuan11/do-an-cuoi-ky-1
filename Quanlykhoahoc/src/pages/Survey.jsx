@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { API_BASE_URL } from "../api/httpClient";
 
 export default function Survey() {
-  const API = process.env.REACT_APP_API_BASE || "http://localhost:8081";
+  const API = API_BASE_URL;
   const [qs, setQs] = useState([]);
   const [sel, setSel] = useState({});
   const [error, setError] = useState("");

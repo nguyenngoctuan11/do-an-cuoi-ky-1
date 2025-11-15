@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { API_BASE_URL } from "../api/httpClient";
 
 export default function Register() {
   const nav = useNavigate();
@@ -11,6 +12,8 @@ export default function Register() {
   const [otpPhase, setOtpPhase] = useState(false);
   const [otpInfo, setOtpInfo] = useState({ email: "", devCode: "" });
   const { setAuthFromResponse } = useAuth();
+
+  const API = API_BASE_URL;
 
   const onSubmit = async (e) => {
     e.preventDefault();
@@ -26,7 +29,6 @@ export default function Register() {
     if (password.length < 6) return setError("Mật khẩu phải >= 6 ký tự");
     if (password !== confirm) return setError("Nhập lại mật khẩu không khớp");
     const role = roleSel === "TEACHER" ? "teacher" : "student";
-    const API = process.env.REACT_APP_API_BASE || "http://localhost:8081";
     try {
       setSubmitting(true);
       const res = await fetch(`${API}/api/auth/otp/register/start`, {
@@ -51,7 +53,6 @@ export default function Register() {
     const form = new FormData(e.currentTarget);
     const code = String(form.get("code") || "").trim();
     if (!/^[0-9]{6}$/.test(code)) return setError("Mã OTP gồm 6 chữ số");
-    const API = process.env.REACT_APP_API_BASE || "http://localhost:8081";
     try{
       setSubmitting(true);
       const res = await fetch(`${API}/api/auth/otp/register/verify`, {

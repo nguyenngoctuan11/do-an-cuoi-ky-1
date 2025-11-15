@@ -90,7 +90,20 @@ CREATE TABLE dbo.courses (
   created_by BIGINT NOT NULL,
   created_at DATETIME2 NOT NULL CONSTRAINT df_courses_created DEFAULT GETUTCDATE(),
   updated_at DATETIME2 NOT NULL CONSTRAINT df_courses_updated DEFAULT GETUTCDATE(),
-  CONSTRAINT ck_courses_level CHECK (level IN (N'beginner', N'intermediate', N'advanced')),
+  CONSTRAINT ck_courses_level CHECK (
+    level IN (
+      N'beginner',
+      N'intermediate',
+      N'advanced',
+      N'350+',
+      N'450+',
+      N'550+',
+      N'650+',
+      N'750+',
+      N'850+',
+      N'950+'
+    )
+  ),
   CONSTRAINT ck_courses_status CHECK (status IN (N'draft', N'published', N'archived')),
   CONSTRAINT fk_courses_creator FOREIGN KEY (created_by) REFERENCES dbo.users(id)
 );

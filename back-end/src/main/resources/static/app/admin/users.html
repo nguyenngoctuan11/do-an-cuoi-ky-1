@@ -5,6 +5,60 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Quản lý người dùng</title>
   <link rel="stylesheet" href="/app/app.css"/>
+  <style>
+    .sticky-toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 15;
+      background: linear-gradient(135deg, rgba(12,15,33,0.95), rgba(15,23,42,0.9));
+      backdrop-filter: blur(6px);
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      padding-bottom: 12px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .table-wrapper {
+      max-height: 70vh;
+      overflow: auto;
+    }
+    .table-wrapper table { min-width: 960px; }
+    .table-wrapper thead th {
+      position: sticky;
+      top: 0;
+      background: rgba(8,12,28,0.95);
+      backdrop-filter: blur(6px);
+      z-index: 10;
+    }
+    body.modal-open {
+      overflow: hidden;
+    }
+    .modal {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 40px 16px;
+      background: rgba(5,7,15,0.85);
+      backdrop-filter: blur(6px);
+      z-index: 200;
+    }
+    .modal.hidden {
+      display: none;
+    }
+    .modal-panel {
+      width: min(960px, 100%);
+      max-height: 90vh;
+      overflow-y: auto;
+      position: relative;
+    }
+    .modal-close {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+    }
+  </style>
   <script type="module">
     import {mountNav, mountAdminMenu, mountAdminUser, api, requireAuth, token} from '/app/app-common.js';
 
@@ -175,7 +229,22 @@
       }
     }
 
+    function openUserModal(){
+      const modal = el('userModal');
+      if(!modal) return;
+      modal.classList.remove('hidden');
+      document.body.classList.add('modal-open');
+    }
+
+    function closeUserModal(){
+      const modal = el('userModal');
+      if(!modal) return;
+      modal.classList.add('hidden');
+      document.body.classList.remove('modal-open');
+    }
+
     async function openEditor(id){
+      openUserModal();
       refs.formMsg().textContent = 'Đang tải người dùng...';
       try{
         const user = await api(`/api/admin/users/${id}`);
@@ -210,6 +279,7 @@
         await api(url, { method, body: JSON.stringify(payload) });
         refs.formMsg().textContent = state.editingId ? 'Đã cập nhật người dùng.' : 'Đã tạo người dùng.';
         resetForm();
+        closeUserModal();
         loadUsers();
       }catch(err){
         refs.formMsg().textContent = err.message || err;
@@ -228,9 +298,26 @@
     }
 
     function bindFormEvents(){
-      el('newUserBtn').addEventListener('click', resetForm);
+      const newBtn = el('newUserBtn');
+      if(newBtn){
+        newBtn.addEventListener('click', ()=>{
+          resetForm();
+          openUserModal();
+        });
+      }
       el('saveUserBtn').addEventListener('click', saveUser);
       el('avatarUploadBtn').addEventListener('click', uploadAvatar);
+      const closeBtn = el('closeUserModal');
+      if(closeBtn) closeBtn.addEventListener('click', closeUserModal);
+      const modal = el('userModal');
+      if(modal){
+        modal.addEventListener('click', (event)=>{
+          if(event.target === modal) closeUserModal();
+        });
+      }
+      window.addEventListener('keydown', (event)=>{
+        if(event.key === 'Escape') closeUserModal();
+      });
     }
 
     window.addEventListener('DOMContentLoaded', async ()=>{
@@ -272,7 +359,7 @@
       </div>
 
       <section class="card">
-        <div class="section-heading">
+        <div class="section-heading sticky-toolbar">
           <div>
             <h2>Danh sách người dùng</h2>
             <p class="muted">Bao gồm đầy đủ thuộc tính.</p>
@@ -300,45 +387,49 @@
         <div id="listMsg" class="muted" style="margin-top:12px;"></div>
       </section>
 
-      <section class="card">
-        <div class="section-heading">
-          <div>
-            <h2 id="formTitle">Tạo người dùng</h2>
-            <p class="muted">Form chỉnh sửa giống form tạo.</p>
-          </div>
-        </div>
-        <div class="form-grid">
-          <label class="field"><span>Email</span><input id="email" placeholder="email@example.com"/></label>
-          <label class="field"><span>Họ tên</span><input id="fullName" placeholder="Tên đầy đủ"/></label>
-          <label class="field"><span>Username</span><input id="username" placeholder="username"/></label>
-          <label class="field"><span>Mật khẩu</span><input id="password" type="password" placeholder="Ít nhất 6 ký tự"/></label>
-          <label class="field" style="grid-column:span 2;">
-            <span>Giới thiệu</span>
-            <textarea id="bio" placeholder="Mô tả ngắn về người dùng"></textarea>
-          </label>
-          <div class="field" style="min-width:240px">
-            <span>Ảnh đại diện</span>
-            <div class="thumb-box">
-              <img id="avatarPreview" class="avatar" hidden alt="Avatar"/>
-              <div id="avatarPlaceholder" class="avatar placeholder">Chưa chọn ảnh</div>
+      <div id="userModal" class="modal hidden">
+        <div class="modal-panel card">
+          <button class="btn ghost tiny modal-close" id="closeUserModal">&times;</button>
+          <div class="section-heading" style="margin-top:8px">
+            <div>
+              <h2 id="formTitle">Tao nguoi dung</h2>
+              <p class="muted">Form chinh sua giong form tao.</p>
             </div>
-            <div class="row" style="margin-top:8px">
-              <input type="file" id="avatarFile" accept="image/*"/>
-              <button class="btn ghost tiny" type="button" id="avatarUploadBtn">Tải ảnh</button>
+          </div>
+          <div class="form-grid">
+            <label class="field"><span>Email</span><input id="email" placeholder="email@example.com"/></label>
+            <label class="field"><span>Ho ten</span><input id="fullName" placeholder="Ten day du"/></label>
+            <label class="field"><span>Username</span><input id="username" placeholder="username"/></label>
+            <label class="field"><span>Mat khau</span><input id="password" type="password" placeholder="It nhat 6 ky tu"/></label>
+            <label class="field" style="grid-column:span 2;">
+              <span>Gioi thieu</span>
+              <textarea id="bio" placeholder="Mo ta ngan ve nguoi dung"></textarea>
+            </label>
+            <div class="field" style="min-width:240px">
+              <span>Anh dai dien</span>
+              <div class="thumb-box">
+                <img id="avatarPreview" class="avatar" hidden alt="Avatar"/>
+                <div id="avatarPlaceholder" class="avatar placeholder">Chua chon anh</div>
+              </div>
+              <div class="row" style="margin-top:8px">
+                <input type="file" id="avatarFile" accept="image/*"/>
+                <button class="btn ghost tiny" type="button" id="avatarUploadBtn">Tai anh</button>
+              </div>
+              <input type="hidden" id="avatarUrl"/>
             </div>
-            <input type="hidden" id="avatarUrl"/>
+            <div class="field" style="grid-column:span 2">
+              <span>Roles</span>
+              <div id="roleOptions" class="role-list"></div>
+            </div>
           </div>
-          <div class="field" style="grid-column:span 2">
-            <span>Roles</span>
-            <div id="roleOptions" class="role-list"></div>
+          <div class="row" style="margin-top:12px">
+            <button class="btn" id="saveUserBtn">Luu</button>
+            <div id="formMsg" class="muted"></div>
           </div>
+          <div id="metaInfo" style="margin-top:8px;"></div>
         </div>
-        <div class="row" style="margin-top:12px">
-          <button class="btn" id="saveUserBtn">Lưu</button>
-          <div id="formMsg" class="muted"></div>
-        </div>
-        <div id="metaInfo" style="margin-top:8px;"></div>
-      </section>
+      </div>
+
     </main>
   </div>
   <div id="noAccess" class="card" hidden style="max-width:640px;margin:32px auto;text-align:center">

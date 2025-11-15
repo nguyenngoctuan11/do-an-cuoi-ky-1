@@ -8,6 +8,7 @@ public interface CourseCardProjection {
     String getSlug();
     String getLevel();
     String getStatus();
+    String getTeacherName();
     BigDecimal getPrice();
     Boolean getIsFree();
     String getThumbnailUrl();

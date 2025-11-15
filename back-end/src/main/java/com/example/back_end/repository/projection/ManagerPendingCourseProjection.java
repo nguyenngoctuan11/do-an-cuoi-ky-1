@@ -8,6 +8,7 @@ public interface ManagerPendingCourseProjection {
     String getSlug();
     String getStatus();
     String getApprovalStatus();
+    String getLevel();
     String getCreatedByEmail();
     String getCreatedByName();
     LocalDateTime getCreatedAt();

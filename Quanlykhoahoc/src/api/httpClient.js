@@ -1,7 +1,26 @@
 import axios from "axios";
 
-export const API_BASE_URL =
-  process.env.REACT_APP_API_BASE?.trim().replace(/\/+$/, "") || "http://localhost:8081";
+const DEFAULT_BACKEND_URL = "http://localhost:8081";
+const DEV_PORTS = new Set(["3000", "3001", "5173", "4173", "1420"]);
+
+const sanitizeBase = (value) => (typeof value === "string" ? value.trim().replace(/\/+$/, "") : "");
+
+const inferBaseUrl = () => {
+  const env = sanitizeBase(process.env.REACT_APP_API_BASE);
+  if (env) return env;
+
+  if (typeof window !== "undefined" && window.location?.origin) {
+    const currentPort = window.location.port;
+    if (currentPort && DEV_PORTS.has(currentPort)) {
+      return DEFAULT_BACKEND_URL;
+    }
+    return sanitizeBase(window.location.origin) || DEFAULT_BACKEND_URL;
+  }
+
+  return DEFAULT_BACKEND_URL;
+};
+
+export const API_BASE_URL = inferBaseUrl();
 
 let runtimeToken = null;
 

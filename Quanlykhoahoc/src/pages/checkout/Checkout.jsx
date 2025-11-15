@@ -1,8 +1,9 @@
 ﻿/* eslint-disable */
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { API_BASE_URL } from "../../api/httpClient";
 
-const API_BASE = process.env.REACT_APP_API_BASE || "";
+const API_BASE = API_BASE_URL;
 
 const OFFLINE_BANK_GUIDE = [
   { label: "Ngan hang", value: "Vietcombank - CN Tan Dinh" },

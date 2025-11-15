@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import CourseShowcaseCard from "../../components/CourseShowcaseCard";
 import { resolveIsFree } from "../../utils/price";
+import { API_BASE_URL } from "../../api/httpClient";
 
-const API_BASE = process.env.REACT_APP_API_BASE || "";
+const API_BASE = API_BASE_URL;
 
 function resolveThumb(u) {
   if (!u) return null;
@@ -19,7 +20,8 @@ function normalize(str) {
 function levelOrder(lv) {
   if (lv == null) return 99;
   const s = normalize(lv);
-  if (/^\d+$/.test(s)) return parseInt(s, 10);
+  const digits = s.match(/(\d{2,3})/);
+  if (digits) return parseInt(digits[1], 10);
   if (["co ban", "beginner", "basic", "foundation"].includes(s)) return 1;
   if (["trung cap", "intermediate", "middle", "medium"].includes(s)) return 2;
   if (["nang cao", "advanced", "expert"].includes(s)) return 3;
@@ -27,6 +29,10 @@ function levelOrder(lv) {
 }
 
 function levelLabel(lv) {
+  if (lv) {
+    const digits = String(lv).match(/(\d{2,3})/);
+    if (digits) return ${digits[1]}+;
+  }
   const o = levelOrder(lv);
   if (o === 1) return "Cơ bản";
   if (o === 2) return "Trung cấp";
@@ -66,6 +72,7 @@ export default function CoursesByLevel() {
               title: c.title ?? c.name ?? c.course_title,
               slug: c.slug ?? c.course_slug ?? c.code,
               level: c.level ?? c.level_name ?? c.difficulty,
+              teacherName: c.teacher_name ?? c.teacherName ?? c.created_by_name ?? null,
               durationWeeks: c.duration_weeks ?? c.durationWeeks ?? c.weeks ?? null,
               lessons: c.lessons_count ?? c.lessonsCount ?? c.total_lessons ?? null,
               thumbnail:
@@ -152,6 +159,7 @@ export default function CoursesByLevel() {
                 title={it.title || "Khóa học"}
                 thumbnail={resolveThumb(it.thumbnail)}
                 level={levelLabel(it.level)}
+                teacherName={it.teacherName}
                 lessonsCount={it.lessons}
                 durationLabel={formatDurationLabel(it.durationWeeks)}
                 price={it.price}

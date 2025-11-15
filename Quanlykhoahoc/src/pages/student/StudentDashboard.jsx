@@ -1,6 +1,7 @@
 ﻿import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { resolveIsFree } from "../../utils/price";
+import { API_BASE_URL } from "../../api/httpClient";
 
 const EXAM_LOAD_ERROR = "Không thể tải bài kiểm tra";
 
@@ -49,7 +50,7 @@ const toCourseViewModel = (course) => {
 };
 
 export default function StudentDashboard() {
-  const API = process.env.REACT_APP_API_BASE || "http://localhost:8081";
+  const API = API_BASE_URL;
   const navigate = useNavigate();
   const [me, setMe] = useState(null);
   const [courses, setCourses] = useState([]);
