@@ -1,10 +1,6 @@
-<<<<<<< HEAD
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { API_BASE_URL } from "../api/httpClient";
-=======
-import React, { useCallback, useEffect, useState } from "react";
 import { useSupportChat } from "../context/SupportChatContext";
->>>>>>> 8941b85574022bc8acafbc19e742a95b726e5ce0
 
 const FALLBACK_THUMB =
   "https://images.unsplash.com/photo-1513258496099-48168024aec0?auto=format&fit=crop&w=480&q=60";
@@ -51,11 +47,8 @@ export default function MyCourses() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
-<<<<<<< HEAD
   const [query, setQuery] = useState("");
-=======
   const { setEntryContext } = useSupportChat();
->>>>>>> 8941b85574022bc8acafbc19e742a95b726e5ce0
 
   const authHeaders = () => {
     const token = localStorage.getItem("token");
@@ -72,17 +65,14 @@ export default function MyCourses() {
       .finally(() => setLoading(false));
   }, [API]);
 
-<<<<<<< HEAD
   useEffect(() => {
     load();
   }, [load]);
-=======
-  useEffect(() => { load(); }, [load]);
+
   useEffect(() => {
     setEntryContext((prev) => ({ ...(prev || {}), origin: "my_courses" }));
     return () => setEntryContext((prev) => (prev?.origin === "my_courses" ? null : prev));
   }, [setEntryContext]);
->>>>>>> 8941b85574022bc8acafbc19e742a95b726e5ce0
 
   const submitReview = async (id) => {
     await fetch(`${API}/api/teacher/courses/${id}/submit`, {
