@@ -1,7 +1,8 @@
-﻿import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useOutletContext, useParams, useNavigate } from "react-router-dom";
 import LessonSidebar from "../../components/LessonSidebar";
 import httpClient, { API_BASE_URL } from "../../api/httpClient";
+import { useSupportChat } from "../../context/SupportChatContext";
 
 function PlayerHeader({ lesson }) {
   if (!lesson) return null;
@@ -50,6 +51,7 @@ export default function CoursePlayer() {
   const [loadingExams, setLoadingExams] = useState(false);
   const videoElementRef = useRef(null);
   const allowedSeekRef = useRef(0);
+  const { openChat, setEntryContext } = useSupportChat();
 
   const completedLessonIds = progress?.completedLessonIds || [];
   const [localCompleted, setLocalCompleted] = useState(() => new Set(completedLessonIds));
@@ -59,6 +61,18 @@ export default function CoursePlayer() {
   }, [completedLessonIds]);
 
   const completedSet = useMemo(() => localCompleted, [localCompleted]);
+
+  useEffect(() => {
+    if (!courseId) return undefined;
+    setEntryContext((prev) => ({
+      ...(prev || {}),
+      courseId,
+      courseTitle: progress?.courseTitle || progress?.courseName || `Kha hc ${courseId}`,
+      origin: "lesson_player",
+    }));
+    return () =>
+      setEntryContext((prev) => (prev && String(prev.courseId) === String(courseId) ? null : prev));
+  }, [courseId, progress?.courseTitle, progress?.courseName, setEntryContext]);
 
   const resolveVideoSource = useCallback((url) => {
     if (!url) return { type: "none", url: null };
@@ -263,7 +277,7 @@ export default function CoursePlayer() {
   const handleSelectLesson = (lesson) => {
     if (!lesson?.id) return;
     if (!canAccessLesson(lesson.id)) {
-      alert("Bạn cần hoàn thành bài trước đó trước khi mở bài này.");
+      alert("Bạn cần hoàn thành bài trước để mở bài này.");
       return;
     }
     setCurrent(lesson);
@@ -276,16 +290,32 @@ export default function CoursePlayer() {
   const formatExamMeta = (exam) => {
     const minutes = exam?.timeLimitSec ? Math.round(exam.timeLimitSec / 60) : null;
     const timeLabel = minutes ? `${minutes} phút` : "Không giới hạn";
-    return `${exam?.questionCount ?? 0} câu • ${timeLabel}`;
+    return `${exam?.questionCount ?? 0} cu  ${timeLabel}`;
   };
 
   return (
     <div className="grid md:grid-cols-[1fr_320px] gap-6">
       <div>
         <PlayerHeader lesson={current} />
+        <div className="mb-4 flex justify-end">
+          <button
+            type="button"
+            onClick={() =>
+              openChat({
+                origin: "lesson_player",
+                courseId,
+                courseTitle: progress?.courseTitle || progress?.courseName || current?.title || `Kha hc ${courseId}`,
+                topic: "lesson_issue",
+              })
+            }
+            className="text-sm font-semibold text-primary-700 hover:underline"
+          >
+            Cần hỗ trợ? Chat với tư vấn viên
+          </button>
+        </div>
         <div className="mb-6 rounded-xl border border-stone-200 bg-white p-4 shadow-sm flex flex-wrap items-center gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-stone-400">Tiến độ khóa học</p>
+            <p className="text-xs uppercase tracking-[0.3em] text-stone-400">Tin  kha hc</p>
             <p className="text-2xl font-semibold text-stone-900">
               {completedLessons}/{totalLessons} bài ({completionPercent}%)
             </p>
@@ -310,7 +340,7 @@ export default function CoursePlayer() {
               {exams.map((exam) => (
                 <div key={exam.id} className="flex flex-wrap items-center justify-between gap-3 bg-white rounded-lg px-4 py-3 shadow-sm border border-primary-100">
                   <div>
-                    <p className="font-medium text-stone-900">{exam.title || `Bài kiểm tra #${exam.id}`}</p>
+                    <p className="font-medium text-stone-900">{exam.title || `Bi kim tra #${exam.id}`}</p>
                     <p className="text-sm text-stone-500">{formatExamMeta(exam)}</p>
                   </div>
                   <button onClick={() => goToExam(exam.id)} className="btn btn-primary">
@@ -341,7 +371,7 @@ export default function CoursePlayer() {
           </div>
         ) : (
           <div className="aspect-video rounded-xl bg-gradient-to-br from-primary-200 to-primary-100 flex items-center justify-center text-stone-500">
-            Ch??a cA3 video cho bA?i h???c nA?y
+            Chưa có video cho bài học này
           </div>
         )}\r\n        <div className="mt-4">
           <ContentTabs active={tab} setActive={setTab} />
@@ -351,14 +381,14 @@ export default function CoursePlayer() {
               <div className="space-y-3">
                 <textarea className="input border-stone-300 w-full h-32" placeholder="Ghi chú của bạn..." />
                 <div className="text-right">
-                  <button className="btn btn-primary">Lưu ghi chú</button>
+                  <button className="btn btn-primary">Lu ghi ch</button>
                 </div>
               </div>
             )}
             {tab === "resources" && (
               <ul className="list-disc pl-5 space-y-1">
-                <li>Tài liệu tham khảo</li>
-                <li>Liên kết hữu ích</li>
+                <li>Tài liệu tham kho</li>
+                <li>Lin kt hu ch</li>
               </ul>
             )}
           </div>
@@ -382,7 +412,7 @@ export default function CoursePlayer() {
               <span>Hãy xem hết video để mở bài tiếp theo.</span>
               {videoSource.type === "youtube" && (
                 <button onClick={handleManualComplete} className="btn btn-xs border-stone-300 text-stone-600">
-                  Đánh dấu đã xem
+                  nh du  xem
                 </button>
               )}
             </div>

@@ -1,7 +1,11 @@
 ﻿/* eslint-disable */
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+<<<<<<< HEAD
 import { API_BASE_URL } from "../../api/httpClient";
+=======
+import { useSupportChat } from "../../context/SupportChatContext";
+>>>>>>> 8941b85574022bc8acafbc19e742a95b726e5ce0
 
 const API_BASE = API_BASE_URL;
 
@@ -43,6 +47,7 @@ export default function Checkout() {
   const [message, setMessage] = useState("");
   const [offlineInfo, setOfflineInfo] = useState(null);
   const [enrollResult, setEnrollResult] = useState("");
+  const { openChat, setEntryContext } = useSupportChat();
 
   useEffect(() => {
     (async () => {
@@ -102,6 +107,17 @@ export default function Checkout() {
     const slug = c.slug ?? c.course_slug ?? c.code ?? null;
     return { title, desc, price, img, id, slug };
   }, [course]);
+
+  useEffect(() => {
+    if (!view?.id) return undefined;
+    setEntryContext((prev) => ({
+      ...(prev || {}),
+      courseId: view.id,
+      courseTitle: view.title,
+      origin: "checkout",
+    }));
+    return () => setEntryContext((prev) => (prev && prev.courseId === view.id ? null : prev));
+  }, [view?.id, view?.title, setEntryContext]);
 
   const rememberPendingCourse = () => {
     if (view.id) {
@@ -183,6 +199,22 @@ export default function Checkout() {
   return (
     <div className="max-w-5xl mx-auto px-4 py-10">
       <h2 className="text-2xl font-bold">Thanh toan khoa hoc</h2>
+      <div className="mt-2 flex justify-end">
+        <button
+          type="button"
+          onClick={() =>
+            openChat({
+              origin: "checkout",
+              courseId: view.id,
+              courseTitle: view.title,
+              topic: "payment_issue",
+            })
+          }
+          className="text-sm font-semibold text-primary-700 hover:underline"
+        >
+          Cần hỗ trợ thanh toán? Chat với tư vấn viên
+        </button>
+      </div>
       {message && <div className="mt-2 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800">{message}</div>}
       {loading && <div className="mt-4 text-sm text-stone-500">Dang tai thong tin khoa hoc...</div>}
       <div className="grid md:grid-cols-2 gap-4 mt-6">

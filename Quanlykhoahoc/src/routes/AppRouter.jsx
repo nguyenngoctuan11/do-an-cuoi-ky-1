@@ -23,7 +23,10 @@ import Checkout from "../pages/checkout/Checkout";
 import CheckoutSuccess from "../pages/checkout/CheckoutSuccess";
 import CheckoutFailed from "../pages/checkout/CheckoutFailed";
 import AccountSettings from "../pages/account/AccountSettings";
+import SupportInbox from "../pages/manager/SupportInbox";
 import RequireAuth from "./RequireAuth";
+import { AuthProvider } from "../context/AuthContext";
+import { SupportChatProvider } from "../context/SupportChatContext";
 
 const router = createBrowserRouter([
   {
@@ -71,6 +74,14 @@ const router = createBrowserRouter([
           { path: "lesson/:lessonId", element: <CoursePlayer /> },
         ],
       },
+      {
+        path: "/manager/support",
+        element: (
+          <RequireAuth>
+            <SupportInbox />
+          </RequireAuth>
+        ),
+      },
       { path: "/login", element: <Login /> },
       { path: "/register", element: <Register /> },
       { path: "*", element: <NotFound /> },
@@ -79,5 +90,11 @@ const router = createBrowserRouter([
 ]);
 
 export default function AppRouter() {
-  return <RouterProvider router={router} />;
+  return (
+    <AuthProvider>
+      <SupportChatProvider>
+        <RouterProvider router={router} />
+      </SupportChatProvider>
+    </AuthProvider>
+  );
 }

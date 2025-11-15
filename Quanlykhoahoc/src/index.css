@@ -15,6 +15,12 @@
 .form-error {
   @apply text-sm text-red-600 mt-1;
 }
+.pill-btn {
+  @apply rounded-full bg-primary-600/90 text-white px-3 py-1.5 font-semibold transition text-xs hover:bg-primary-700;
+}
+.pill-btn-muted {
+  @apply rounded-full bg-stone-200 text-stone-700 px-3 py-1.5 font-semibold text-xs hover:bg-stone-300;
+}
 /* Nền radial mềm giống mockup */
 .bg-soft {
   background: radial-gradient(

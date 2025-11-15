@@ -26,8 +26,17 @@ public class MailService {
     }
 
     public void sendOtpEmail(String to, String subject, String code, int expireMinutes) {
+        String body = "Ma OTP cua ban la: " + code + "\nMa se het han sau " + expireMinutes + " phut.";
+        sendTextMail(to, subject, body);
+    }
+
+    private void sendTextMail(String to, String subject, String body) {
+        if (to == null || to.isBlank()) {
+            log.warn("Skip sending email because recipient is empty. Subject: {}", subject);
+            return;
+        }
         if (mailSender == null) {
-            log.info("MailSender not configured. OTP for {} is {} (expires {} min).", to, code, expireMinutes);
+            log.info("[DEV] Email -> {} | {}: {}", to, subject, body);
             return;
         }
         try {
@@ -36,10 +45,10 @@ public class MailService {
             helper.setTo(to);
             helper.setFrom(parseAddress(fromAddress));
             helper.setSubject(subject);
-            helper.setText("Mã OTP của bạn là: " + code + "\nMã sẽ hết hạn sau " + expireMinutes + " phút.", false);
+            helper.setText(body, false);
             mailSender.send(mimeMessage);
         } catch (Exception ex) {
-            log.warn("Không thể gửi email OTP tới {}: {}", to, ex.getMessage());
+            log.warn("Khong the gui email toi {}: {}", to, ex.getMessage());
         }
     }
 
