@@ -1,0 +1,951 @@
+﻿<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Báo cáo thống kê</title>
+    <link rel="stylesheet" href="/app/app.css" />
+    <style>
+      .kpi-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 12px;
+        margin-top: 16px;
+      }
+      .kpi-card {
+        padding: 14px 16px;
+        border-radius: 999px;
+        background: radial-gradient(circle at top left, rgba(129, 140, 248, 0.32), #080e28);
+        border: 1px solid rgba(148, 163, 255, 0.32);
+        color: #e5edff;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .kpi-label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        opacity: 0.85;
+      }
+      .kpi-value {
+        font-size: 20px;
+        font-weight: 700;
+      }
+      .table-scroll {
+        max-height: 70vh;
+        overflow: auto;
+      }
+      .table-scroll table {
+        min-width: 920px;
+      }
+      .table-scroll thead th {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background: rgba(8, 12, 34, 0.96);
+        backdrop-filter: blur(6px);
+      }
+      .badge-soft {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        padding: 2px 10px;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+      }
+      .badge-soft.published { background: rgba(34, 197, 94, 0.16); color: #4ade80; }
+      .badge-soft.pending { background: rgba(251, 191, 36, 0.18); color: #facc15; }
+      .badge-soft.draft { background: rgba(248, 250, 252, 0.08); color: #e2e8f0; }
+      .analytics-meta { font-size: 12px; margin-top: 4px; }
+      .toolbar-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+      }
+      .toolbar-row .subtitle { margin-top: 4px; font-size: 13px; }
+      .toolbar-inputs { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+      .toolbar-inputs input { min-width: 240px; }
+      .teacher-filter { position: relative; min-width: 220px; }
+      .teacher-filter > button { width: 100%; }
+      .teacher-dropdown {
+        position: absolute;
+        top: calc(100% + 8px);
+        right: 0;
+        width: 280px;
+        max-height: 320px;
+        overflow-y: auto;
+        background: rgba(7, 11, 34, 0.98);
+        border: 1px solid rgba(148, 163, 255, 0.3);
+        border-radius: 20px;
+        box-shadow: 0 20px 40px rgba(3, 6, 30, 0.55);
+        z-index: 50;
+        padding: 8px;
+      }
+      .teacher-dropdown.hidden { display: none; }
+      .teacher-option {
+        width: 100%;
+        border: none;
+        background: transparent;
+        text-align: left;
+        padding: 10px 14px;
+        border-radius: 12px;
+        color: #f1f5ff;
+        cursor: pointer;
+      }
+      .teacher-option:hover { background: rgba(129, 140, 248, 0.18); }
+      .teacher-option-name { font-weight: 600; }
+      .teacher-option-meta { font-size: 12px; opacity: 0.8; }
+      .teacher-option-stats { font-size: 11px; opacity: 0.65; margin-top: 2px; }
+      #managerSection .kpi-row + .table-scroll { margin-top: 20px; }
+    </style>
+    <script type="module">
+      import { mountNav, mountAdminMenu, mountAdminUser, api, requireAuth, currentUser } from "/app/app-common.js";
+
+      const nf = new Intl.NumberFormat("vi-VN");
+      const managerState = { page: 0, size: 10, keyword: "", teacher: "", teacherLabel: "" };
+      const teacherState = { sort: "students", direction: "desc", courseId: null, quizId: null };
+      const revenueState = { from: "", to: "" };
+      const activityState = { range: "last_30_days" };
+      const teacherOptionsState = { items: [], open: false };
+
+      const formatNumber = (value) => nf.format(value ?? 0);
+      const formatDate = (value) => {
+        if (!value) return "--";
+        try {
+          return new Date(value).toLocaleString("vi-VN");
+        } catch {
+          return value;
+        }
+      };
+      const buildPieStyle = (percent) => {
+        const safe = Math.min(Math.max(percent || 0, 0), 100);
+        return `background: conic-gradient(#a78bfa 0% ${safe}%, rgba(255,255,255,0.08) ${safe}% 100%);`;
+      };
+      const renderBarChart = (items = [], { labelKey = "label", valueKey = "value" } = {}) => {
+        if (!items.length) return '<div class="muted">Chưa có dữ liệu.</div>';
+        const max = Math.max(...items.map((i) => i[valueKey] || 0), 1);
+        return `
+          <div class="space-y">
+            ${items
+              .map((i) => {
+                const v = i[valueKey] || 0;
+                const w = Math.round((v * 100) / max);
+                return `
+                  <div>
+                    <div class="flex items-center justify-between text-xs">
+                      <span>${i[labelKey] || "--"}</span>
+                      <span>${formatNumber(v)}</span>
+                    </div>
+                    <div class="h-2 rounded-full bg-white/10 overflow-hidden">
+                      <div class="h-full rounded-full" style="width:${w}%;background:linear-gradient(90deg,#34d399,#10b981);"></div>
+                    </div>
+                  </div>
+                `;
+              })
+              .join("")}
+          </div>
+        `;
+      };
+
+      const badgeTone = (status) => {
+        const value = String(status || "").toLowerCase();
+        if (value === "published" || value === "approved") return "published";
+        if (value === "pending") return "pending";
+        return "draft";
+      };
+
+      function renderCourseTable(items, { showTeacher } = { showTeacher: false }) {
+        const rows = (items || [])
+          .map((course) => `
+            <tr>
+              <td>#${course.id || "--"}</td>
+              <td>
+                <div>${course.title || "(Chưa đặt tên)"}</div>
+                <div class="muted analytics-meta">${course.slug || "--"}</div>
+              </td>
+              <td>
+                <span class="badge-soft ${badgeTone(course.status)}">${course.status || "--"}</span>
+                ${
+                  course.approvalStatus
+                    ? `<span class="badge-soft ${badgeTone(course.approvalStatus)}" style="margin-left:6px;">${course.approvalStatus}</span>`
+                    : ""
+                }
+              </td>
+              ${
+                showTeacher
+                  ? `<td>
+                      <div>${course.teacherName || "--"}</div>
+                      <div class="muted analytics-meta">${course.teacherEmail || ""}</div>
+                    </td>`
+                  : ""
+              }
+              <td>${formatNumber(course.viewCount)}</td>
+              <td>${formatNumber(course.paymentCount)}</td>
+              <td>${formatDate(course.lastViewedAt)}</td>
+              <td>${formatDate(course.lastPaymentAt)}</td>
+            </tr>
+          `)
+          .join("");
+        const columnCount = showTeacher ? 8 : 7;
+        return `
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Khóa học</th>
+                  <th>Trạng thái</th>
+                  ${showTeacher ? "<th>Giảng viên</th>" : ""}
+                  <th>Lượt xem</th>
+                  <th>Thanh toán</th>
+                  <th>Xem gần nhất</th>
+                  <th>Thanh toán gần nhất</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows || `<tr><td colspan="${columnCount}" class="muted">Chưa có dữ liệu.</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+        `;
+      }
+
+      function renderQuizTable(items, { showTeacher } = { showTeacher: false }) {
+        const rows = (items || [])
+          .map((quiz) => `
+            <tr>
+              <td>#${quiz.id || "--"}</td>
+              <td>
+                <div>${quiz.title || "(Chưa đặt tên)"}</div>
+                <div class="muted analytics-meta">${quiz.courseTitle || "--"}</div>
+              </td>
+              <td>
+                <div>${quiz.courseTitle || "--"}</div>
+                <div class="muted analytics-meta">${quiz.courseSlug || ""}</div>
+              </td>
+              ${
+                showTeacher
+                  ? `<td>
+                      <div>${quiz.teacherName || "--"}</div>
+                      <div class="muted analytics-meta">${quiz.teacherEmail || ""}</div>
+                    </td>`
+                  : ""
+              }
+              <td>${formatNumber(quiz.questionCount)}</td>
+              <td>${formatNumber(quiz.attemptCount)}</td>
+              <td>${formatDate(quiz.lastAttemptAt)}</td>
+            </tr>
+          `)
+          .join("");
+        const columnCount = showTeacher ? 7 : 6;
+        return `
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Bài kiểm tra</th>
+                  <th>Khóa học</th>
+                  ${showTeacher ? "<th>Giảng viên</th>" : ""}
+                  <th>Câu hỏi</th>
+                  <th>Lượt làm</th>
+                  <th>Lần làm gần nhất</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows || `<tr><td colspan="${columnCount}" class="muted">Chưa có bài kiểm tra nào.</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+        `;
+      }
+
+      async function loadTeacherSummary() {
+        const statusEl = document.getElementById("teacherStatus");
+        const cardEl = document.getElementById("teacherCard");
+        statusEl.textContent = "Dang tai so lieu...";
+        cardEl.innerHTML = "";
+        try {
+          const data = await api("/api/reports/teacher/overview");
+          statusEl.textContent = "";
+          renderTeacherSummary(cardEl, data);
+        } catch (err) {
+          statusEl.textContent = err?.message || "Khong the tai du lieu.";
+        }
+      }
+
+      function renderTeacherSummary(container, data) {
+        const kpis = [
+          { label: "Khoa day", value: formatNumber(data.courseCount) },
+          { label: "Hoc vien", value: formatNumber(data.totalStudents) },
+          { label: "Hoan thanh TB", value: `${Math.round(data.averageCompletion || 0)}%` },
+          { label: "Diem TB", value: data.averageScore != null ? data.averageScore.toFixed(1) : "--" },
+        ];
+        const sorted = [...(data.courses || [])].sort((a, b) => {
+          const dir = teacherState.direction === "asc" ? 1 : -1;
+          if (teacherState.sort === "completion") return ((a.completionRate || 0) - (b.completionRate || 0)) * dir;
+          if (teacherState.sort === "score") return ((a.averageScore || 0) - (b.averageScore || 0)) * dir;
+          return ((a.studentCount || 0) - (b.studentCount || 0)) * dir;
+        });
+        const courseRows = sorted
+          .map(
+            (course) => `
+              <tr>
+                <td>#${course.id || course.courseId || "--"}</td>
+                <td>
+                  <div>${course.title || course.courseName || "(Chua dat ten)"}</div>
+                  <div class="muted analytics-meta">${course.slug || ""}</div>
+                </td>
+                <td>${formatNumber(course.studentCount)}</td>
+                <td>${Math.round(course.completionRate || 0)}%</td>
+                <td>${course.averageScore != null ? course.averageScore.toFixed(1) : "--"}</td>
+                <td style="text-align:right">
+                  <button class="btn ghost" data-course="${course.courseId || course.id || ""}">Xem chi tiet</button>
+                </td>
+              </tr>
+            `,
+          )
+          .join("");
+        container.innerHTML = `
+          <div>
+            <div class="toolbar-row">
+              <div>
+                <p class="muted" style="text-transform:uppercase;letter-spacing:0.2em;margin:0 0 4px">Studio giang vien</p>
+                <h2 style="margin:0">Bao cao day hoc</h2>
+                <p class="muted subtitle">Tien do hoc vien, ty le hoan thanh va diem trung binh.</p>
+              </div>
+            </div>
+            <div class="kpi-row">
+              ${kpis
+                .map(
+                  (kpi) => `
+                    <div class="kpi-card">
+                      <span class="kpi-label">${kpi.label}</span>
+                      <span class="kpi-value">${kpi.value}</span>
+                    </div>
+                  `,
+                )
+                .join("")}
+            </div>
+            <div class="table-scroll" style="margin-top:20px">
+              <table>
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Khoa hoc</th>
+                    <th><button class="text-link" data-sort="students">Hoc vien</button></th>
+                    <th><button class="text-link" data-sort="completion">Hoan thanh</button></th>
+                    <th><button class="text-link" data-sort="score">Diem TB</button></th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${courseRows || '<tr><td colspan="6" class="muted">Chua co khoa hoc.</td></tr>'}
+                </tbody>
+              </table>
+            </div>
+            <div id="teacherDetail"></div>
+            <div id="teacherQuiz"></div>
+          </div>
+        `;
+        container.querySelectorAll("[data-sort]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const sort = btn.dataset.sort;
+            if (teacherState.sort === sort) {
+              teacherState.direction = teacherState.direction === "asc" ? "desc" : "asc";
+            } else {
+              teacherState.sort = sort;
+              teacherState.direction = "desc";
+            }
+            renderTeacherSummary(container, data);
+          });
+        });
+        container.querySelectorAll("button[data-course]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const id = btn.dataset.course;
+            teacherState.courseId = id;
+            loadTeacherCourse(id);
+          });
+        });
+      }
+
+      async function loadTeacherCourse(courseId) {
+        const detailHost = document.getElementById("teacherDetail");
+        if (!detailHost) return;
+        detailHost.innerHTML = `<p class="muted">Đang tải chi tiết khóa...</p>`;
+        try {
+          const data = await api(`/api/reports/teacher/course/${courseId}`);
+          renderTeacherCourse(detailHost, data);
+        } catch (err) {
+          detailHost.innerHTML = `<p class="text-error">${err?.message || "Không thể tải chi tiết khóa học."}</p>`;
+        }
+      }
+
+      function renderTeacherCourse(container, data) {
+        if (!data || !data.summary) {
+          container.innerHTML = '<p class="muted">Chưa có dữ liệu.</p>';
+          return;
+        }
+        const students = data.students || [];
+        const filtered = students; // basic filter placeholder
+        container.innerHTML = `
+          <div style="margin-top:20px">
+            <div class="toolbar-row">
+              <div>
+                <p class="muted" style="text-transform:uppercase;letter-spacing:0.2em;margin:0 0 4px">Chi tiết khóa</p>
+                <h3 style="margin:0">${data.summary.courseName || `#${data.summary.courseId}`}</h3>
+                <p class="muted subtitle">Học viên, tiến độ và điểm trung bình.</p>
+              </div>
+              <div class="toolbar-inputs">
+                <a class="btn ghost" href="/api/reports/teacher/course/${data.summary.courseId}/export" target="_blank" rel="noreferrer">Export CSV</a>
+              </div>
+            </div>
+            <div class="kpi-row">
+              <div class="kpi-card"><span class="kpi-label">Học viên</span><span class="kpi-value">${formatNumber(data.summary.studentCount)}</span></div>
+              <div class="kpi-card"><span class="kpi-label">Hoàn thành</span><span class="kpi-value">${Math.round(data.summary.completionRate || 0)}%</span></div>
+              <div class="kpi-card"><span class="kpi-label">Điểm TB</span><span class="kpi-value">${data.summary.averageScore != null ? data.summary.averageScore.toFixed(1) : "--"}</span></div>
+            </div>
+            <div class="table-scroll" style="margin-top:16px">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Họ tên</th>
+                    <th>Email</th>
+                    <th>% hoàn thành</th>
+                    <th>Điểm TB</th>
+                    <th>Trạng thái</th>
+                    <th>Hoạt động gần</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${
+                    filtered
+                      .map(
+                        (s) => `
+                          <tr>
+                            <td>${s.fullName || "--"}</td>
+                            <td>${s.email || ""}</td>
+                            <td>${Math.round(s.completionPercent || 0)}%</td>
+                            <td>${s.averageScore != null ? s.averageScore.toFixed(1) : "--"}</td>
+                            <td>${s.status || "--"}</td>
+                            <td>${formatDate(s.lastActivityAt)}</td>
+                          </tr>
+                        `,
+                      )
+                      .join("") || '<tr><td colspan="6" class="muted">Chưa có học viên.</td></tr>'
+                  }
+                </tbody>
+              </table>
+            </div>
+            <div id="teacherCourseQuiz"></div>
+          </div>
+        `;
+        const quizHost = container.querySelector("#teacherCourseQuiz");
+        if (quizHost && data.quizzes) {
+          quizHost.innerHTML = `
+            <div style="margin-top:24px">
+              <div class="toolbar-row">
+                <div>
+                  <p class="muted" style="text-transform:uppercase;letter-spacing:0.2em;margin:0 0 4px">Bài kiểm tra</p>
+                  <h3 style="margin:0">Danh sách quiz</h3>
+                </div>
+              </div>
+              <div class="table-scroll" style="margin-top:12px">
+                <table>
+                  <thead>
+                    <tr><th>ID</th><th>Tên</th><th>Lượt làm</th><th>Điểm TB</th><th></th></tr>
+                  </thead>
+                  <tbody>
+                    ${
+                      data.quizzes
+                        .map(
+                          (q) => `
+                            <tr>
+                              <td>#${q.quizId}</td>
+                              <td>${q.quizTitle || "(Chưa đặt tên)"}</td>
+                              <td>${formatNumber(q.attemptCount)}</td>
+                              <td>${q.averageScore != null ? q.averageScore.toFixed(1) : "--"}</td>
+                              <td style="text-align:right"><button class="btn ghost" data-quiz="${q.quizId}">Xem quiz</button></td>
+                            </tr>
+                          `,
+                        )
+                        .join("") || '<tr><td colspan="5" class="muted">Chưa có quiz.</td></tr>'
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          `;
+          quizHost.querySelectorAll("button[data-quiz]").forEach((btn) => {
+            btn.addEventListener("click", () => {
+              const qid = btn.dataset.quiz;
+              teacherState.quizId = qid;
+              loadQuizReport(qid);
+            });
+          });
+        }
+      }
+
+      async function loadQuizReport(quizId) {
+        const host = document.getElementById("teacherQuiz");
+        if (!host) return;
+        host.innerHTML = `<p class="muted">Đang tải báo cáo quiz...</p>`;
+        try {
+          const data = await api(`/api/reports/teacher/quiz/${quizId}`);
+          host.innerHTML = renderQuizReport(data);
+        } catch (err) {
+          host.innerHTML = `<p class="text-error">${err?.message || "Không thể tải báo cáo quiz."}</p>`;
+        }
+      }
+
+      function renderQuizReport(data) {
+        const dist = data?.distribution || {};
+        const distRows = Object.entries(dist)
+          .map(([bucket, value]) => `<div class="flex items-center justify-between"><span>${bucket}</span><strong>${formatNumber(value)}</strong></div>`)
+          .join("");
+        const attempts = data?.attempts || [];
+        const attemptRows =
+          attempts
+            .slice(0, 15)
+            .map(
+              (a) => `
+                <tr>
+                  <td>${a.studentName || a.studentEmail || a.studentId || "--"}</td>
+                  <td>${a.studentEmail || ""}</td>
+                  <td>${a.score != null ? a.score.toFixed(1) : "--"}</td>
+                  <td>${a.status || ""}</td>
+                  <td>${formatDate(a.finishedAt || a.startedAt)}</td>
+                </tr>
+              `,
+            )
+            .join("") || '<tr><td colspan="5" class="muted">Chưa có lượt làm bài.</td></tr>';
+        return `
+          <div class="card" style="margin-top:20px">
+            <div class="toolbar-row">
+              <div>
+                <p class="muted" style="text-transform:uppercase;letter-spacing:0.2em;margin:0 0 4px">Quiz</p>
+                <h3 style="margin:0">${data.quizTitle || `Quiz #${data.quizId}`}</h3>
+                <p class="muted subtitle">Phân bố điểm và lượt làm.</p>
+              </div>
+            </div>
+            <div class="kpi-row">
+              <div class="kpi-card"><span class="kpi-label">Đã làm</span><span class="kpi-value">${formatNumber(data.attempted)}</span></div>
+              <div class="kpi-card"><span class="kpi-label">Đăng ký</span><span class="kpi-value">${formatNumber(data.enrolled)}</span></div>
+              <div class="kpi-card"><span class="kpi-label">Điểm TB</span><span class="kpi-value">${data.averageScore != null ? data.averageScore.toFixed(1) : "--"}</span></div>
+              <div class="kpi-card"><span class="kpi-label">Max/Min</span><span class="kpi-value">${data.maxScore != null ? data.maxScore.toFixed(1) : "--"} / ${data.minScore != null ? data.minScore.toFixed(1) : "--"}</span></div>
+            </div>
+            <div class="grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:12px">
+              <div class="card" style="padding:12px">
+                <div class="toolbar-row" style="gap:6px"><strong>Phân bố điểm</strong></div>
+                <div class="space-y" style="margin-top:8px">${distRows || '<div class="muted">Chưa có dữ liệu.</div>'}</div>
+              </div>
+              <div class="table-scroll" style="max-height:320px">
+                <table>
+                  <thead><tr><th>Học viên</th><th>Email</th><th>Điểm</th><th>Trạng thái</th><th>Thời gian</th></tr></thead>
+                  <tbody>${attemptRows}</tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      async function loadManagerReport() {
+        const statusEl = document.getElementById("managerStatus");
+        const cardEl = document.getElementById("managerCard");
+        statusEl.textContent = "Dang tai thong ke...";
+        cardEl.innerHTML = "";
+        try {
+          const data = await api("/api/reports/admin/summary");
+          statusEl.textContent = "";
+          renderManagerReport(cardEl, data);
+        } catch (err) {
+          statusEl.textContent = err?.message || "Khong the tai du lieu quan tri.";
+        }
+      }
+
+      function renderManagerReport(container, data) {
+        const totals = data?.totals || {};
+        const kpis = [
+          { label: "Hoc vien", value: formatNumber(totals.students) },
+          { label: "Giang vien", value: formatNumber(totals.teachers) },
+          { label: "Khoa hoc", value: formatNumber(totals.courses) },
+          { label: "Active 7d", value: formatNumber(totals.activeStudents7d) },
+          { label: "Hoan thanh TB", value: `${Math.round(totals.avgCompletion || 0)}%` },
+          { label: "Quiz", value: formatNumber(totals.quizAttempts) },
+          { label: "Bai hoc hoan thanh", value: formatNumber(totals.lessonsCompleted) },
+          { label: "Tổng doanh thu", value: formatNumber(totals.revenueTotal) },
+        ];
+        const pieTop = (data.topEnrollments || []).slice(0, 4).map((c) => ({
+          label: c.courseName || `#${c.courseId}`,
+          value: c.enrollmentCount || 0,
+        }));
+        const topEnrollRows = (data.topEnrollments || [])
+          .map(
+            (item) => `
+              <tr>
+                <td>#${item.courseId || "--"}</td>
+                <td>${item.courseName || "(Chua dat ten)"}</td>
+                <td>${formatNumber(item.enrollmentCount || 0)}</td>
+              </tr>
+            `,
+          )
+          .join("");
+        const topCompletionRows = (data.topCompletion || [])
+          .map(
+            (item) => `
+              <tr>
+                <td>#${item.courseId || "--"}</td>
+                <td>${item.courseName || "(Chua dat ten)"}</td>
+                <td>${Math.round(item.completionRate || 0)}%</td>
+              </tr>
+            `,
+          )
+          .join("");
+        const activityItems = (data.activeByDay || [])
+          .map((pt) => `<div class="flex items-center justify-between"><span>${pt.date || "--"}</span><strong>${formatNumber(pt.value || 0)}</strong></div>`)
+          .join("");
+        container.innerHTML = `
+          <div>
+            <div class="toolbar-row">
+              <div>
+                <p class="muted" style="text-transform:uppercase;letter-spacing:0.2em;margin:0 0 4px">Quan tri</p>
+                <h2 style="margin:0">Tong quan he thong</h2>
+                <p class="muted subtitle">Khoa hoc, hoc vien, ty le hoan thanh va hoat dong gan day.</p>
+              </div>
+            </div>
+            <div class="kpi-row">
+              ${kpis
+                .map(
+                  (kpi) => `
+                    <div class="kpi-card">
+                      <span class="kpi-label">${kpi.label}</span>
+                      <span class="kpi-value">${kpi.value}</span>
+                    </div>
+                  `,
+                )
+                .join("")}
+            </div>
+            <div class="grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:12px">
+              <div class="card" style="padding:12px">
+                <div class="toolbar-row" style="gap:8px"><strong>Top khoá (đăng ký)</strong></div>
+                <div class="flex items-center gap-3" style="margin-top:8px;">
+                  ${
+                    pieTop.length
+                      ? `
+                        <div style="width:140px;height:140px;border-radius:50%;${buildPieStyle(
+                          (pieTop[0]?.value * 100) / (pieTop.reduce((s, i) => s + i.value, 1) || 1),
+                        )};border:1px solid rgba(255,255,255,0.08);"></div>
+                        <div class="space-y">
+                          ${pieTop
+                            .map(
+                              (p, idx) =>
+                                `<div class="flex items-center gap-2 text-sm"><span class="badge-soft" style="background:rgba(129,140,248,${
+                                  0.25 + idx * 0.15
+                                });color:#e5edff;">${idx + 1}</span><span>${p.label}</span><strong>${formatNumber(p.value)}</strong></div>`,
+                            )
+                            .join("")}
+                        </div>
+                      `
+                      : '<div class="muted">Chưa có dữ liệu.</div>'
+                  }
+                </div>
+              </div>
+              <div class="card" style="padding:12px">
+                <div class="toolbar-row" style="gap:8px"><strong>Hoàn thành theo khoá</strong></div>
+                ${renderBarChart(
+                  (data.topCompletion || []).slice(0, 5).map((c) => ({
+                    label: c.courseName || `#${c.courseId}`,
+                    value: Math.round(c.completionRate || 0),
+                  })),
+                  { labelKey: "label", valueKey: "value" },
+                )}
+              </div>
+            </div>
+            <div class="grid" style="display:grid;gap:16px;margin-top:20px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));">
+              <div class="card" style="padding:12px">
+                <div class="toolbar-row" style="gap:8px;margin-bottom:8px"><strong>Top khoa theo dang ky</strong></div>
+                <div class="table-scroll">
+                  <table>
+                    <thead>
+                      <tr><th>ID</th><th>Khoa hoc</th><th>Dang ky</th></tr>
+                    </thead>
+                    <tbody>
+                      ${topEnrollRows || '<tr><td colspan="3" class="muted">Chua co du lieu.</td></tr>'}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div class="card" style="padding:12px">
+                <div class="toolbar-row" style="gap:8px;margin-bottom:8px"><strong>Top hoan thanh cao</strong></div>
+                <div class="table-scroll">
+                  <table>
+                    <thead>
+                      <tr><th>ID</th><th>Khoa hoc</th><th>Hoan thanh</th></tr>
+                    </thead>
+                    <tbody>
+                      ${topCompletionRows || '<tr><td colspan="3" class="muted">Chua co du lieu.</td></tr>'}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div class="card" style="padding:12px">
+                <div class="toolbar-row" style="gap:8px;margin-bottom:8px"><strong>Active theo ngay</strong></div>
+                <div class="muted analytics-meta">Hoc vien hoat dong 14 ngay gan nhat</div>
+                <div class="space-y" style="margin-top:8px">${activityItems || '<div class="muted">Chua co du lieu.</div>'}</div>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      async function loadRevenue() {
+        const status = document.getElementById("revenueStatus");
+        const host = document.getElementById("revenueCard");
+        status.textContent = "Dang tai doanh thu...";
+        host.innerHTML = "";
+        const params = new URLSearchParams();
+        if (revenueState.from) params.set("from", revenueState.from);
+        if (revenueState.to) params.set("to", revenueState.to);
+        try {
+          const data = await api(`/api/reports/admin/revenue?${params.toString()}`);
+          status.textContent = "";
+          renderRevenue(host, data);
+        } catch (err) {
+          status.textContent = err?.message || "Khong the tai doanh thu.";
+        }
+      }
+
+      function renderRevenue(container, data) {
+        const rows = (data.byDate || [])
+          .map((item) => `<tr><td>${item.date || "--"}</td><td>${formatNumber(item.amount)}</td></tr>`)
+          .join("");
+        const topRows = (data.topCourses || [])
+          .map(
+            (c) => `
+              <tr>
+                <td>#${c.courseId || "--"}</td>
+                <td>${c.courseTitle || "(Chua dat ten)"}</td>
+                <td>${formatNumber(c.payments)}</td>
+                <td>${formatNumber(c.revenue)}</td>
+              </tr>
+            `,
+          )
+          .join("");
+        container.innerHTML = `
+          <div>
+            <div class="toolbar-row">
+              <div>
+                <p class="muted" style="text-transform:uppercase;letter-spacing:0.2em;margin:0 0 4px">Doanh thu</p>
+                <h2 style="margin:0">Báo cáo doanh thu</h2>
+                <p class="muted subtitle">Từ ${data.from || "-"} đến ${data.to || "-"}.</p>
+              </div>
+              <div class="toolbar-inputs">
+                <input id="revenueFrom" type="date" value="${revenueState.from}" />
+                <input id="revenueTo" type="date" value="${revenueState.to}" />
+                <button class="btn" id="revenueFilterBtn">Xem</button>
+              </div>
+            </div>
+            <div class="kpi-row">
+              <div class="kpi-card"><span class="kpi-label">Tổng doanh thu</span><span class="kpi-value">${formatNumber(data.total)}</span></div>
+              <div class="kpi-card"><span class="kpi-label">Khoá ghi nhận</span><span class="kpi-value">${(data.topCourses || []).length}</span></div>
+            </div>
+            <div class="grid" style="display:grid;grid-template-columns:1.1fr 0.9fr;gap:16px;margin-top:16px;">
+              <div class="card" style="padding:12px">
+                <div class="toolbar-row" style="gap:8px;margin-bottom:6px"><strong>Theo ngày</strong></div>
+                ${renderBarChart(
+                  (data.byDate || []).map((i) => ({ label: i.date || "--", value: i.amount || 0 })),
+                  { labelKey: "label", valueKey: "value" },
+                )}
+              </div>
+              <div class="card" style="padding:12px">
+                <div class="toolbar-row" style="gap:8px;margin-bottom:6px"><strong>Top khóa học</strong></div>
+                <div class="table-scroll" style="max-height:260px">
+                  <table>
+                    <thead><tr><th>ID</th><th>Khoá</th><th>Thanh toán</th><th>Doanh thu</th></tr></thead>
+                    <tbody>${topRows || '<tr><td colspan="4" class="muted">Chưa có dữ liệu.</td></tr>'}</tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+        document.getElementById("revenueFilterBtn")?.addEventListener("click", () => {
+          revenueState.from = document.getElementById("revenueFrom")?.value || "";
+          revenueState.to = document.getElementById("revenueTo")?.value || "";
+          loadRevenue();
+        });
+      }
+
+      async function loadActivity() {
+        const host = document.getElementById("activityCard");
+        const status = document.getElementById("activityStatus");
+        status.textContent = "Dang tai hoat dong...";
+        host.innerHTML = "";
+        try {
+          const data = await api(`/api/reports/admin/activity?range=${activityState.range}`);
+          status.textContent = "";
+          renderActivity(host, data);
+        } catch (err) {
+          status.textContent = err?.message || "Khong the tai hoat dong.";
+        }
+      }
+
+      function renderActivity(container, data) {
+        const kpis = [
+          { label: "Login", value: formatNumber(data.logins) },
+          { label: "Làm bài", value: formatNumber(data.quizSubmissions) },
+          { label: "Bài học xong", value: formatNumber(data.lessonsCompleted) },
+          { label: "Khoá mới", value: formatNumber(data.coursesCreated) },
+        ];
+        container.innerHTML = `
+          <div>
+            <div class="toolbar-row">
+              <div>
+                <p class="muted" style="text-transform:uppercase;letter-spacing:0.2em;margin:0 0 4px">Hoạt động hệ thống</p>
+                <h2 style="margin:0">Phạm vi: ${data.range || "last_30_days"}</h2>
+              </div>
+              <div class="toolbar-inputs">
+                <select id="activityRange">
+                  <option value="last_7_days" ${activityState.range === "last_7_days" ? "selected" : ""}>7 ngày</option>
+                  <option value="last_30_days" ${activityState.range === "last_30_days" ? "selected" : ""}>30 ngày</option>
+                  <option value="last_90_days" ${activityState.range === "last_90_days" ? "selected" : ""}>90 ngày</option>
+                </select>
+                <button class="btn" id="activityFilterBtn">Xem</button>
+              </div>
+            </div>
+            <div class="kpi-row">
+              ${kpis
+                .map(
+                  (kpi) => `
+                    <div class="kpi-card">
+                      <span class="kpi-label">${kpi.label}</span>
+                      <span class="kpi-value">${kpi.value}</span>
+                    </div>
+                  `,
+                )
+                .join("")}
+            </div>
+          </div>
+        `;
+        document.getElementById("activityFilterBtn")?.addEventListener("click", () => {
+          activityState.range = document.getElementById("activityRange")?.value || "last_30_days";
+          loadActivity();
+        });
+      }
+      function renderTeacherDropdown() {
+        const dropdown = document.getElementById("teacherDropdown");
+        if (!dropdown) return;
+        const items = teacherOptionsState.items || [];
+        dropdown.innerHTML = `
+          <button type="button" class="teacher-option" data-email="" data-label="Tất cả giảng viên">
+            Tất cả giảng viên
+          </button>
+          ${items
+            .map(
+              (teacher) => `
+            <button type="button" class="teacher-option" data-email="${teacher.email || ""}" data-label="${teacher.fullName || teacher.email}">
+              <div class="teacher-option-name">${teacher.fullName || teacher.email}</div>
+              <div class="teacher-option-meta">${teacher.email || ""}</div>
+              <div class="teacher-option-stats">Khóa: ${formatNumber(teacher.courseCount)} · Bài kiểm tra: ${formatNumber(teacher.quizCount)}</div>
+            </button>
+          `,
+            )
+            .join("")}
+        `;
+        dropdown.querySelectorAll(".teacher-option").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            managerState.teacher = btn.dataset.email || "";
+            managerState.teacherLabel = btn.dataset.label || "";
+            managerState.page = 0;
+            toggleTeacherDropdown(false);
+            updateTeacherButton();
+            loadManagerReport();
+          });
+        });
+      }
+
+      document.addEventListener("click", (e) => {
+        if (!teacherOptionsState.open) return;
+        const button = document.getElementById("teacherFilterButton");
+        const dropdown = document.getElementById("teacherDropdown");
+        if (!button || !dropdown) return;
+        if (!button.contains(e.target) && !dropdown.contains(e.target)) {
+          toggleTeacherDropdown(false);
+        }
+      });
+
+      window.addEventListener("DOMContentLoaded", async () => {
+        mountNav("nav");
+        mountAdminMenu("adminMenu", "analytics-report");
+        mountAdminUser("adminUserCard");
+        if (!requireAuth(["TEACHER", "MANAGER"])) return;
+        const roles = currentUser().roles;
+        const isManager = roles.includes("MANAGER");
+        const isTeacherOnly = roles.includes("TEACHER") && !isManager; // manager không xem phần giảng viên
+        if (isTeacherOnly) {
+          await loadTeacherSummary();
+        } else {
+          const teacherSection = document.getElementById("teacherSection");
+          if (teacherSection) teacherSection.style.display = "none";
+        }
+        if (isManager) {
+          await loadManagerReport();
+          await loadRevenue();
+          await loadActivity();
+        } else {
+          document.getElementById("managerSection").style.display = "none";
+          document.getElementById("revenueSection").style.display = "none";
+          document.getElementById("activitySection").style.display = "none";
+        }
+      });
+    </script>
+  </head>
+  <body class="admin-body">
+    <div class="admin-shell">
+      <aside class="admin-sidebar">
+        <div class="admin-brand">
+          <span class="eyebrow">Bảng điều khiển</span>
+          <strong>Không gian giảng viên</strong>
+          <p class="muted">Theo dõi toàn bộ khóa học của bạn.</p>
+        </div>
+        <div id="adminUserCard" class="admin-user-card"></div>
+        <nav id="adminMenu" class="admin-menu"></nav>
+        <div class="admin-sidebar-footer">
+          <a class="text-link" href="/app/index.html">← Về trang tổng quan</a>
+        </div>
+      </aside>
+      <div class="admin-main">
+        <div id="nav" data-variant="compact"></div>
+        <main class="admin-content">
+          <div class="admin-page-header">
+            <p class="muted">Tổng quan nhanh</p>
+            <h1>Báo cáo thống kê</h1>
+          </div>
+          <section id="teacherSection" class="card" style="margin-bottom:24px">
+            <div id="teacherStatus" class="muted" style="margin-bottom:8px"></div>
+            <div id="teacherCard"></div>
+          </section>
+          <section id="managerSection" class="card">
+            <div id="managerStatus" class="muted" style="margin-bottom:8px"></div>
+            <div id="managerCard"></div>
+          </section>
+          <section id="revenueSection" class="card">
+            <div id="revenueStatus" class="muted" style="margin-bottom:8px"></div>
+            <div id="revenueCard"></div>
+          </section>
+          <section id="activitySection" class="card">
+            <div id="activityStatus" class="muted" style="margin-bottom:8px"></div>
+            <div id="activityCard"></div>
+          </section>
+        </main>
+      </div>
+    </div>
+  </body>
+</html>
+

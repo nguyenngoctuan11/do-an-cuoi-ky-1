@@ -1,11 +1,8 @@
 ﻿/* eslint-disable */
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-<<<<<<< HEAD
 import { API_BASE_URL } from "../../api/httpClient";
-=======
 import { useSupportChat } from "../../context/SupportChatContext";
->>>>>>> 8941b85574022bc8acafbc19e742a95b726e5ce0
 
 const API_BASE = API_BASE_URL;
 

@@ -1,4 +1,4 @@
-export const apiBase = '';
+﻿export const apiBase = '';
 
 export function token() {
   return localStorage.getItem('token');
@@ -31,47 +31,66 @@ export function currentUser() {
 
 function adminLinksForRoles(roles) {
   const items = [];
+  const pushUnique = (link) => {
+    if (!items.some((item) => item.id === link.id)) {
+      items.push(link);
+    }
+  };
   const canTeach = roles.includes('TEACHER') || roles.includes('MANAGER');
   if (canTeach) {
-    items.push({
+    pushUnique({
       id: 'teacher-courses',
       href: '/app/admin/teacher-courses.html',
       label: 'Khóa học của tôi',
       hint: 'Theo dõi bản nháp & trạng thái',
     });
-    items.push({
+    pushUnique({
       id: 'teacher-new-course',
       href: '/app/admin/teacher-new-course.html',
       label: 'Tạo khóa học',
       hint: 'Lên nội dung & modules',
     });
-    items.push({
+    pushUnique({
       id: 'teacher-quiz',
       href: '/app/admin/teacher-quiz.html',
       label: 'Tạo bài kiểm tra',
       hint: 'Thêm câu hỏi, media',
     });
   }
+  if (canTeach || roles.includes('MANAGER')) {
+    pushUnique({
+      id: 'analytics-report',
+      href: '/app/admin/analytics-report.html',
+      label: 'Báo cáo thống kê',
+      hint: 'Lượt xem & thanh toán',
+    });
+  }
   if (roles.includes('MANAGER')) {
-    items.push({
+    pushUnique({
       id: 'admin-users',
       href: '/app/admin/users.html',
       label: 'Người dùng',
       hint: 'Tạo / sửa / xoá tài khoản',
     });
-    items.push({
+    pushUnique({
+      id: 'manager-posts',
+      href: '/app/admin/manager-posts.html',
+      label: 'Duyệt bài viết',
+      hint: 'Kiểm duyệt bài blog',
+    });
+    pushUnique({
       id: 'manager-review',
       href: '/app/admin/manager-review.html',
       label: 'Duyệt khóa học',
       hint: 'Phê duyệt nội dung mới',
     });
-    items.push({
+    pushUnique({
       id: 'support-chat',
       href: '/app/admin/support-chat.html',
       label: 'Chat học viên',
       hint: 'Trả lời yêu cầu hỗ trợ',
     });
-    items.push({
+    pushUnique({
       id: 'db-browser',
       href: '/app/admin/db-browser.html',
       label: 'DB Browser',

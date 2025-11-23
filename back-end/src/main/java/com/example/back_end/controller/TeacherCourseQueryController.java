@@ -21,7 +21,7 @@ public class TeacherCourseQueryController {
     }
 
     @GetMapping("/my")
-    @PreAuthorize("hasAnyRole('TEACHER','MANAGER')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<TeacherCourseProjection>> myCourses(Authentication auth) {
         String email = String.valueOf(auth.getPrincipal());
         return ResponseEntity.ok(courseRepository.findCoursesByCreatorEmail(email));

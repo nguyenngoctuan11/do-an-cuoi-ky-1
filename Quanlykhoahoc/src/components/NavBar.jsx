@@ -110,16 +110,27 @@ function UserDropdown({ user, avatarUrl, fallbackInitial, onLogout }) {
 
   const displayInitial = (fallbackInitial || "U").trim().charAt(0).toUpperCase();
 
-  const quickLinks = useMemo(
-    () => [
-      { label: "Trang cá nhân", to: "/student" },
-      { label: "Viết blog", to: "/blog" },
-      { label: "Bài viết của tôi", to: "/blog" },
-      { label: "Bài viết đã lưu", to: "/blog" },
-      { label: "Cài đặt", to: "/account/settings" },
-    ],
-    [],
+  const contributor = useMemo(() => Boolean(user), [user]);
+
+  const canModeratePosts = useMemo(
+    () => (user?.roles || []).some((role) => ["manager", "admin"].includes(String(role).toLowerCase())),
+    [user?.roles],
   );
+
+  const quickLinks = useMemo(() => {
+    const links = [{ label: "Trang cá nhân", to: "/student" }];
+    if (contributor) {
+      links.push({ label: "Viết bài mới", to: "/posts/new" });
+      links.push({ label: "Bài viết của tôi", to: "/posts" });
+    }
+    links.push({ label: "Bài viết đã lưu", to: "/posts/saved" });
+    if (canModeratePosts) {
+      links.push({ label: "Duyệt bài viết", to: "/manager/posts" });
+      links.push({ label: "Quản lý người dùng", to: "/manager/users" });
+    }
+    links.push({ label: "Cài đặt", to: "/account/settings" });
+    return links;
+  }, [contributor, canModeratePosts]);
 
   const handleOpen = () => {
     if (hoverTimeout.current) {

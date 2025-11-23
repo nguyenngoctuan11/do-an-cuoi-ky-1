@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Duyệt bài viết</title>
+    <link rel="stylesheet" href="/app/app.css" />
+    <style>
+      .post-card {
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        border-radius: 24px;
+        padding: 16px;
+        background: #fff;
+        box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+      }
+      .post-card h3 {
+        margin: 0;
+        font-size: 1.1rem;
+      }
+      .post-meta {
+        font-size: 0.85rem;
+        color: #728197;
+      }
+      .actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 12px;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        background: #f3f4f6;
+        color: #475569;
+      }
+    </style>
+    <script type="module">
+      import {
+        mountNav,
+        mountAdminMenu,
+        mountAdminUser,
+        api,
+        requireAuth,
+      } from "/app/app-common.js";
+
+      let posts = [];
+
+      async function load(skipAuth = false) {
+        if (!skipAuth && !requireAuth(["MANAGER", "ADMIN"])) {
+          document.getElementById("status").textContent = "Bạn không có quyền truy cập trang duyệt bài viết.";
+          document.getElementById("postList").innerHTML = "";
+          return;
+        }
+        document.getElementById("status").textContent = "Đang tải dữ liệu...";
+        try {
+          const payload = await api("/api/admin/posts/pending");
+          const raw = payload?.items ?? payload?.content ?? payload ?? [];
+          posts = Array.isArray(raw) ? raw : [];
+          render();
+        } catch (err) {
+          document.getElementById("status").textContent = err.message || "Không thể tải danh sách bài viết.";
+          document.getElementById("postList").innerHTML = "";
+        }
+      }
+
+      async function approve(id) {
+        if (!confirm("Xuất bản bài viết này?")) return;
+        await api(`/api/admin/posts/${id}/approve`, { method: "POST" });
+        load(true);
+      }
+
+      async function reject(id) {
+        const reason = prompt("Nhập lý do từ chối", "");
+        if (reason === null) return;
+        await api(`/api/admin/posts/${id}/reject`, {
+          method: "POST",
+          body: JSON.stringify({ reason }),
+        });
+        load(true);
+      }
+
+      function render() {
+        const host = document.getElementById("postList");
+        if (!host) return;
+        document.getElementById("status").textContent = posts.length
+          ? `Có ${posts.length} bài viết chờ duyệt`
+          : "Không có bài viết nào chờ duyệt.";
+        if (!posts.length) {
+          host.innerHTML = '<div class="empty">Không có bài viết nào cần xử lý.</div>';
+          return;
+        }
+        host.innerHTML = posts
+          .map(
+            (post) => `
+          <article class="post-card">
+            <div class="row" style="justify-content: space-between; gap: 12px;">
+              <div style="flex:1; min-width: 240px;">
+                <div class="pill">${post.category || "blog"}</div>
+                <h3>${post.title}</h3>
+                <p class="post-meta">
+                  Tác giả: ${post.authorName || "Không rõ"} · ${
+              post.createdAt ? new Date(post.createdAt).toLocaleString("vi-VN") : ""
+            }
+                </p>
+                <p class="muted line-clamp-2">${post.excerpt || "Chưa có tóm tắt"}</p>
+                <div class="post-meta">
+                  Thuộc khóa học: ${post.courseTitle || "Blog chung"} · Hiển thị: ${post.visibility}
+                </div>
+                ${
+                  post.tags?.length
+                    ? `<div class="post-meta">Tags: ${post.tags
+                        .map((tag) => `<span class="pill" style="background:#eef2ff;color:#4c1d95">${tag}</span>`)
+                        .join(" ")}</div>`
+                    : ""
+                }
+              </div>
+              <div class="actions">
+                <a class="btn ghost" href="/blog/${post.slug}" target="_blank" rel="noreferrer">Xem preview</a>
+                <button class="btn secondary" data-approve="${post.id}">Duyệt & xuất bản</button>
+                <button class="btn danger ghost" data-reject="${post.id}">Từ chối</button>
+              </div>
+            </div>
+          </article>
+        `,
+          )
+          .join("");
+      }
+
+      window.addEventListener("DOMContentLoaded", () => {
+        mountNav("nav");
+        mountAdminMenu("adminMenu", "manager-posts");
+        mountAdminUser("adminUserCard");
+        document.getElementById("postList").addEventListener("click", (evt) => {
+          const approveId = evt.target?.dataset?.approve;
+          const rejectId = evt.target?.dataset?.reject;
+          if (approveId) approve(Number(approveId));
+          if (rejectId) reject(Number(rejectId));
+        });
+        document.getElementById("refreshBtn").addEventListener("click", () => load(true));
+        load();
+      });
+    </script>
+  </head>
+  <body class="admin-body">
+    <div class="admin-shell">
+      <aside class="admin-sidebar">
+        <div class="admin-brand">
+          <span class="eyebrow">Bảng điều khiển</span>
+          <strong>Quản lý LMS</strong>
+          <p class="muted">Khu vực dành cho giảng viên & quản lý</p>
+        </div>
+        <div id="adminUserCard" class="admin-user-card"></div>
+        <nav id="adminMenu" class="admin-menu"></nav>
+        <div class="admin-sidebar-footer">
+          <a class="text-link" href="/app/index.html">← Về trang tổng quan</a>
+        </div>
+      </aside>
+      <div class="admin-main">
+        <div id="nav" data-variant="compact"></div>
+        <main class="admin-content">
+          <div class="admin-page-header">
+            <p class="muted">Quy trình kiểm duyệt nội dung</p>
+            <h1>Bài viết chờ duyệt</h1>
+          </div>
+          <div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+            <div>
+              <h2 style="margin:0">Danh sách bài viết</h2>
+              <p id="status" class="muted" style="margin:4px 0 0"></p>
+            </div>
+            <button class="btn secondary" id="refreshBtn">Làm mới</button>
+          </div>
+          <div id="postList" class="column" style="gap:16px;margin-top:16px"></div>
+        </main>
+      </div>
+    </div>
+  </body>
+</html>

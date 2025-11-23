@@ -24,42 +24,47 @@ import CheckoutSuccess from "../pages/checkout/CheckoutSuccess";
 import CheckoutFailed from "../pages/checkout/CheckoutFailed";
 import AccountSettings from "../pages/account/AccountSettings";
 import SupportInbox from "../pages/manager/SupportInbox";
+import MyPosts from "../pages/posts/MyPosts";
+import PostEditor from "../pages/posts/PostEditor";
+import PostModeration from "../pages/manager/PostModeration";
+import UserDirectory from "../pages/manager/UserDirectory";
+import SavedPosts from "../pages/posts/SavedPosts";
 import RequireAuth from "./RequireAuth";
 import { AuthProvider } from "../context/AuthContext";
 import { SupportChatProvider } from "../context/SupportChatContext";
 
 const router = createBrowserRouter([
   {
+    path: "/",
     element: <App />,
     children: [
-      { path: "/", element: <Home /> },
-      { path: "/home", element: <Home /> },
-      { path: "/courses", element: <Courses /> },
-      { path: "/survey", element: <Survey /> },
-      { path: "/paths/:id", element: <PathDetail /> },
-      { path: "/student", element: <StudentDashboard /> },
-      { path: "/my-courses", element: <MyCourses /> },
-      { path: "/courses/:slug", element: <CourseDetail /> },
+      { index: true, element: <Home /> },
+      { path: "home", element: <Home /> },
+      { path: "courses", element: <Courses /> },
+      { path: "survey", element: <Survey /> },
+      { path: "paths/:id", element: <PathDetail /> },
+      { path: "student", element: <StudentDashboard /> },
+      { path: "my-courses", element: <MyCourses /> },
+      { path: "courses/:slug", element: <CourseDetail /> },
       {
-        path: "/courses/:courseId/exams/:examId",
+        path: "courses/:courseId/exams/:examId",
         element: (
           <RequireAuth>
             <ExamPlayer />
           </RequireAuth>
         ),
       },
-      { path: "/blog", element: <Blog /> },
-      { path: "/blog/:slug", element: <BlogDetail /> },
-      
-      { path: "/mentors", element: <Mentors /> },
-      { path: "/faq", element: <FAQ /> },
-      { path: "/about", element: <About /> },
-      { path: "/contact", element: <Contact /> },
-      { path: "/checkout", element: <Checkout /> },
-      { path: "/checkout/success", element: <CheckoutSuccess /> },
-      { path: "/checkout/failed", element: <CheckoutFailed /> },
+      { path: "blog", element: <Blog /> },
+      { path: "blog/:slug", element: <BlogDetail /> },
+      { path: "mentors", element: <Mentors /> },
+      { path: "faq", element: <FAQ /> },
+      { path: "about", element: <About /> },
+      { path: "contact", element: <Contact /> },
+      { path: "checkout", element: <Checkout /> },
+      { path: "checkout/success", element: <CheckoutSuccess /> },
+      { path: "checkout/failed", element: <CheckoutFailed /> },
       {
-        path: "/account/settings",
+        path: "account/settings",
         element: (
           <RequireAuth>
             <AccountSettings />
@@ -67,7 +72,7 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: "/learn/:courseId",
+        path: "learn/:courseId",
         element: <LearnLayout />,
         children: [
           { index: true, element: <CoursePlayer /> },
@@ -75,15 +80,63 @@ const router = createBrowserRouter([
         ],
       },
       {
-        path: "/manager/support",
+        path: "posts",
+        element: (
+          <RequireAuth>
+            <MyPosts />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: "posts/new",
+        element: (
+          <RequireAuth>
+            <PostEditor />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: "posts/:postId/edit",
+        element: (
+          <RequireAuth>
+            <PostEditor />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: "posts/saved",
+        element: (
+          <RequireAuth>
+            <SavedPosts />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: "manager/support",
         element: (
           <RequireAuth>
             <SupportInbox />
           </RequireAuth>
         ),
       },
-      { path: "/login", element: <Login /> },
-      { path: "/register", element: <Register /> },
+      {
+        path: "manager/posts",
+        element: (
+          <RequireAuth roles={["MANAGER", "ADMIN"]}>
+            <PostModeration />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: "manager/users",
+        element: (
+          <RequireAuth roles={["MANAGER", "ADMIN"]}>
+            <UserDirectory />
+          </RequireAuth>
+        ),
+      },
+      { path: "login", element: <Login /> },
+      { path: "register", element: <Register /> },
       { path: "*", element: <NotFound /> },
     ],
   },
